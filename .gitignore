@@ -92,6 +92,8 @@ venv.bak/
 
 # Spyder project settings
 .spyderproject
+
+
 .spyproject
 
 # Rope project settings
@@ -102,3 +104,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# vscode settings
+.vscode/
