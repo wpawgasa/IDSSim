@@ -28,8 +28,7 @@ class BorderSim(QWidget):
         self.intruders = {"agents":[]}
         self.others = {"agents":[]}
         self.segments = {"segments":[]}
-        self.possible_paths = {"paths":[]}
-        self.possible_otherpaths = {"paths":[]}
+
         self.w_td = 1.0
         self.w_ob = 1.0
         self.w_st = 1.0
@@ -993,9 +992,9 @@ class BorderSim(QWidget):
             s_node = s.getNode()
             s_node.setPos(0,0)
 
-    def pauseSim(self):
+    # def pauseSim(self):
 
-    def resetSim(self):
+    # def resetSim(self):
 
     
 if __name__ == "__main__":
