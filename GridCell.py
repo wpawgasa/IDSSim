@@ -1,8 +1,5 @@
-import sys
-import numpy as np
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+
 
 class GridCell(QGraphicsRectItem):
     
@@ -14,9 +11,9 @@ class GridCell(QGraphicsRectItem):
         self.td = 0
         self.ob = 0
         self.st = 0
-        self.de = 0
-        self.positive_m = 0
-        self.negative_m = 0
+        # self.de = 0
+        self.L = 0
+        # self.negative_m = 0
         self.isEntry = False
         self.isExit = False
         self.setAcceptHoverEvents(True)
@@ -63,11 +60,11 @@ class GridCell(QGraphicsRectItem):
     def setSt(self, st):
         self.st = st
 
-    def getDe(self):
-        return self.de
-
-    def setDe(self, de):
-        self.de = de
+    # def getDe(self):
+    #     return self.de
+    #
+    # def setDe(self, de):
+    #     self.de = de
 
     def isEntryCell(self):
         return self.isEntry
@@ -87,35 +84,19 @@ class GridCell(QGraphicsRectItem):
         else:
             self.isExit = True
         
-    def calPositiveM(self, w_td, w_ob, w_st, w_de, sum_st):
-        if self.td==1:
-            self.positive_m = 0
-        elif sum_st>0:
-            # self.m = w_td*(1-self.td)+w_ob*self.ob+w_st*self.st/sum_st+w_de*(np.exp(-1*self.de))
-            self.positive_m = w_td*(1-self.td)+w_ob*self.ob+w_st*self.st/sum_st+w_de*(1-self.de)
+    def calScore(self, num_tres):
+        if self.td == 1:
+            self.L = 0
+        elif num_tres > 0:
+            self.L = (1-self.td)+self.ob+self.st/num_tres
         else:
-            self.positive_m = w_td*(1-self.td)+w_ob*self.ob+w_de*(1-self.de)
+            self.L = (1 - self.td) + self.ob
 
-    def setPositiveM(self,m):
-        self.positive_m = m
+    def setL(self,L):
+        self.L = L
 
-    def getPositiveM(self):
-        return self.positive_m
-
-    def calNegativeM(self, w_td, w_de):
-        if self.td==1:
-            self.negative_m = 0
-        else:
-            self.negative_m = w_td*(1-self.td)+w_de*(self.de)
-
-    def getOffset(self):
-        return self.positive_m - self.negative_m
-
-    def setNegativeM(self,m):
-        self.negative_m = m
-
-    def getNegativeM(self):
-        return self.negative_m
+    def getL(self):
+        return self.L
 
     def setEntry(self, b):
         self.isEntry = b

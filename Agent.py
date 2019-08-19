@@ -9,8 +9,8 @@ class Agent(QGraphicsEllipseItem):
         super(Agent, self).__init__(x, y, w, h, parent)
         self.type = type
         self.curLoc = loc
-        self.startLoc = loc
         self.sensor = None
+        self.plan = {"path":[]}
 
     
 

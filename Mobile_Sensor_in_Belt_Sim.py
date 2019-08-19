@@ -1,7 +1,3 @@
-import sys
-import numpy as np
-import scipy.special as sp
-import operator
 import csv
 import sip
 from PyQt5.QtCore import *
@@ -13,9 +9,11 @@ from functools import partial
 sip.setapi('QString',2)
 sip.setapi('QVariant',2)
 
+
 class SimScene(QGraphicsScene):
     cellEntered = pyqtSignal([QGraphicsItem],[QGraphicsWidget])
     cellLeave = pyqtSignal([QGraphicsItem],[QGraphicsWidget])
+
 
 class BorderSim(QWidget):
     def __init__(self):
@@ -24,45 +22,38 @@ class BorderSim(QWidget):
         self.number_row = 0
         self.number_col = 0
 
-        self.patrollers = {"agents":[]}
-        self.intruders = {"agents":[]}
+        self.patrols = {"agents":[]}
+        self.trespassers = {"agents":[]}
         self.others = {"agents":[]}
         self.segments = {"segments":[]}
 
-        self.w_td = 1.0
-        self.w_ob = 1.0
-        self.w_st = 1.0
-        self.w_de = 1.0
-        self.w_td_n = 1.0
-        self.w_de_n = 1.0
-        self.sum_st = 0
-        self.intruder_arr_model = 1
-        self.intruder_mov_model = 1
-        self.intruder_arr_rate = 0
-        self.other_arr_model = 1
-        self.other_arr_rate = 0
-        self.patroller_mov_model = 1
-        self.num_patroller = 0
+        self.patrol_move_model = 1
+        self.trespasser_move_model = 1
+
+        self.num_patrol = 0
 
         self.entry_prob = []
         self.totalStat = 0
-        self.targetlifetime = 0.5 #target is active after time period
+        # self.targetlifetime = 0.5 #target is active after time period
 
-        self.number_i_entry = 0    #number of intruder entering the area during the period
-        self.number_o_entry = 0    #number of regular trespasser entering the area during the period
-        self.number_i_exit = 0   #number of intruder exiting the area through the exit line
-        self.number_o_exit = 0
+        self.number_i_entry = 0    #number of trespasser entering the area during the period
+        self.number_o_entry = 0    #number of noise generated in the area during the period
+        self.number_i_exit = 0   #number of trespasser exiting the area through the exit line
+        # self.number_o_exit = 0
         self.number_i_detected = 0 #number of intruder detected by a sensors (true detection)
         self.number_o_detected = 0 #number of intruder detected by a sensors (false detection)
+
+        self.accu_tres = 0
 
         self.num_period = 1
         self.period_len = 100
         self.stage_duration = 0.1
 
-        layout = QHBoxLayout()      
+        layout = QHBoxLayout()
+        self.sceneWidget = QWidget()
         self.setSimScene()
         tabView = self.createTabView()
-        layout.addWidget(self.view)
+        layout.addWidget(self.sceneWidget)
         layout.addWidget(tabView)
         self.setLayout(layout)
         self.setFixedSize(1400,800)
@@ -91,69 +82,87 @@ class BorderSim(QWidget):
         self.scene.cellEntered.connect(self.handleCellEntered)
         self.scene.cellLeave.connect(self.handleCellLeave)
 
-        self.display_row = self.scene.addText("Row: ")
+        self.infoscene = QGraphicsScene(self)
+        self.infoscene.setBackgroundBrush(QColor(0, 0, 0, 255))
+
+        self.display_row = self.infoscene.addText("Row: ")
         self.display_row.setPos(10,5)
         self.display_row.setFont(self.font)
-        self.display_col = self.scene.addText("Column: ")
+        self.display_col = self.infoscene.addText("Column: ")
         self.display_col.setPos(50,5)
         self.display_col.setFont(self.font)
-        self.display_td = self.scene.addText("Difficulty: ")
+        self.display_td = self.infoscene.addText("Difficulty: ")
         self.display_td.setPos(110,5)
         self.display_td.setFont(self.font)
-        self.display_ob = self.scene.addText("Obscurity: ")
+        self.display_ob = self.infoscene.addText("Obscurity: ")
         self.display_ob.setPos(200,5)
         self.display_ob.setFont(self.font)
-        self.display_st = self.scene.addText("Statistic: ")
+        self.display_st = self.infoscene.addText("Statistic: ")
         self.display_st.setPos(280,5)
         self.display_st.setFont(self.font)
-        self.display_m = self.scene.addText("Offset: ")
-        self.display_m.setPos(10,15)
-        self.display_m.setFont(self.font)
+        self.display_L = self.infoscene.addText("L: ")
+        self.display_L.setPos(380,5)
+        self.display_L.setFont(self.font)
 
-        self.display_row_val = self.scene.addText("-")
+        self.display_row_val = self.infoscene.addText("-")
         self.display_row_val.setPos(35,5)
         self.display_row_val.setFont(self.font)
         self.display_row_val.setDefaultTextColor(QColor(255, 255, 0, 255))
-        self.display_col_val = self.scene.addText("-")
+        self.display_col_val = self.infoscene.addText("-")
         self.display_col_val.setPos(90,5)
         self.display_col_val.setFont(self.font)
         self.display_col_val.setDefaultTextColor(QColor(255, 255, 0, 255))
-        self.display_td_val = self.scene.addText("-")
+        self.display_td_val = self.infoscene.addText("-")
         self.display_td_val.setPos(173,5)
         self.display_td_val.setFont(self.font)
         self.display_td_val.setDefaultTextColor(QColor(255, 0, 0, 255))
-        self.display_ob_val = self.scene.addText("-")
+        self.display_ob_val = self.infoscene.addText("-")
         self.display_ob_val.setPos(258,5)
         self.display_ob_val.setFont(self.font)
         self.display_ob_val.setDefaultTextColor(QColor(153, 0, 255, 255))
-        self.display_st_val = self.scene.addText("-")
+        self.display_st_val = self.infoscene.addText("-")
         self.display_st_val.setPos(340,5)
         self.display_st_val.setFont(self.font)
         self.display_st_val.setDefaultTextColor(QColor(255, 0, 102, 255))
-        self.display_m_val = self.scene.addText("-")
-        self.display_m_val.setPos(80,15)
-        self.display_m_val.setFont(self.font)
-        self.display_m_val.setDefaultTextColor(QColor(0, 0, 255, 255))
-        
+        self.display_L_val = self.infoscene.addText("-")
+        self.display_L_val.setPos(420,5)
+        self.display_L_val.setFont(self.font)
+        self.display_L_val.setDefaultTextColor(QColor(0, 0, 255, 255))
 
-        self.view = QGraphicsView(self)
-        self.view.setFixedSize(500,800)
-        self.view.setSceneRect(0,0,500,800)
+        self.view_0 = QGraphicsView(self)
+        self.view_0.setFixedSize(600, 30)
+        self.view_0.setSceneRect(0, 0, 600, 30)
+
+        self.view_0.fitInView(0, 0, 600, 30, Qt.KeepAspectRatio)
+
+        self.view_0.setScene(self.infoscene)
+        self.view_0.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.view_0.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        self.view_1 = QGraphicsView(self)
+        self.view_1.setFixedSize(600, 730)
+        # self.view_1.setSceneRect(0,0,800,1000)
         
-        self.view.fitInView(0,0,500,800,Qt.KeepAspectRatio)
+        self.view_1.fitInView(0,0,600,730,Qt.KeepAspectRatio)
         
-        self.view.setScene(self.scene)
-        self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.view_1.setScene(self.scene)
+        self.view_1.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.view_1.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.view_0)
+        layout.addWidget(self.view_1)
+        self.sceneWidget.setLayout(layout)
+        self.sceneWidget.setFixedSize(600,780)
     
     def handleCellEntered(self, cell):
         # print(cell.getId())
-        self.display_row_val.setPlainText(str(cell.getRow()))
-        self.display_col_val.setPlainText(str(cell.getCol()))
-        self.display_td_val.setPlainText(str(cell.getTd()))
-        self.display_ob_val.setPlainText(str(cell.getOb()))
-        self.display_st_val.setPlainText(str(cell.getSt()))
-        self.display_m_val.setPlainText(str(cell.getOffset()))
+        self.display_row_val.setPlainText(str(np.around(cell.getRow(),decimals=2)))
+        self.display_col_val.setPlainText(str(np.around(cell.getCol(),decimals=2)))
+        self.display_td_val.setPlainText(str(np.around(cell.getTd(),decimals=2)))
+        self.display_ob_val.setPlainText(str(np.around(cell.getOb(),decimals=2)))
+        self.display_st_val.setPlainText(str(np.around(cell.getSt(),decimals=2)))
+        self.display_L_val.setPlainText(str(np.around(cell.getL(),decimals=2)))
     
     def handleCellLeave(self, cell):
         # print(cell.getId())
@@ -162,7 +171,7 @@ class BorderSim(QWidget):
         self.display_td_val.setPlainText("-")
         self.display_ob_val.setPlainText("-")
         self.display_st_val.setPlainText("-")
-        self.display_m_val.setPlainText("-")
+        self.display_L_val.setPlainText("-")
 
     def createTabView(self):
         tabView = QTabWidget()
@@ -215,67 +224,25 @@ class BorderSim(QWidget):
         buttonLayOut.addWidget(loadSTbutton)
         layout.addRow(buttonLayOut)
 
-        posweightLayout = QHBoxLayout()
-        posweightTDLabel = QLabel("+TD weight")
-        posweightOBLabel = QLabel("+OB weight")
-        posweightSTLabel = QLabel("+ST weight")
-        posweightDELabel = QLabel("+DE weight")
-        posweightTD = QDoubleSpinBox()
-        posweightTD.setRange(0.0,1.0)
-        posweightTD.setValue(1.0)
-        posweightTD.valueChanged.connect(self.onPosTDChanged)
-        posweightOB = QDoubleSpinBox()
-        posweightOB.setRange(0.0,1.0)
-        posweightOB.setValue(1.0)
-        posweightOB.valueChanged.connect(self.onPosOBChanged)
-        posweightST = QDoubleSpinBox()
-        posweightST.setRange(0.0,1.0)
-        posweightST.setValue(1.0)
-        posweightST.valueChanged.connect(self.onPosSTChanged)
-        posweightDE = QDoubleSpinBox()
-        posweightDE.setRange(0.0,1.0)
-        posweightDE.setValue(1.0)
-        posweightDE.valueChanged.connect(self.onPosDEChanged)
-        posweightLayout.addWidget(posweightTDLabel)
-        posweightLayout.addWidget(posweightTD)
-        posweightLayout.addWidget(posweightOBLabel)
-        posweightLayout.addWidget(posweightOB)
-        posweightLayout.addWidget(posweightSTLabel)
-        posweightLayout.addWidget(posweightST)
-        posweightLayout.addWidget(posweightDELabel)
-        posweightLayout.addWidget(posweightDE)
-        layout.addRow(posweightLayout)
-
-        negweightLayout = QHBoxLayout()
-        negweightTDLabel = QLabel("-TD weight")
-        negweightDELabel = QLabel("-DE weight")
-        negweightTD = QDoubleSpinBox()
-        negweightTD.setRange(0.0,1.0)
-        negweightTD.setValue(1.0)
-        negweightTD.valueChanged.connect(self.onNegTDChanged)
-        negweightDE = QDoubleSpinBox()
-        negweightDE.setRange(0.0,1.0)
-        negweightDE.setValue(1.0)
-        negweightDE.valueChanged.connect(self.onNegDEChanged)
-        negweightLayout.addWidget(negweightTDLabel)
-        negweightLayout.addWidget(negweightTD)
-        negweightLayout.addWidget(negweightDELabel)
-        negweightLayout.addWidget(negweightDE)
-        layout.addRow(negweightLayout)
-
         box2Layout = QHBoxLayout()
 
         areaViewLayout = QHBoxLayout()
         areaViewLabel = QLabel("View Selection")
         viewSelNone = QRadioButton("None")
         viewSelNone.setChecked(True)
+        viewTress = QRadioButton("Trespassability")
         viewSelTD = QRadioButton("Difficulty")
         viewSelOB = QRadioButton("Obscurity")
         viewSelST = QRadioButton("Statistic")
         viewSelNone.toggled.connect(self.changeToNoneView)
+        viewTress.toggled.connect(self.changeToTresView)
         viewSelTD.toggled.connect(self.changeToTDView)
+        viewSelOB.toggled.connect(self.changeToOBView)
+        viewSelST.toggled.connect(self.changeToSTView)
+
         areaViewLayout.addWidget(areaViewLabel)
         areaViewLayout.addWidget(viewSelNone)
+        areaViewLayout.addWidget(viewTress)
         areaViewLayout.addWidget(viewSelTD)
         areaViewLayout.addWidget(viewSelOB)
         areaViewLayout.addWidget(viewSelST)
@@ -285,52 +252,52 @@ class BorderSim(QWidget):
 
         layout.addRow(box2Layout)
 
-        box3Layout = QHBoxLayout()
+        # box3Layout = QHBoxLayout()
 
-        pathViewLayout = QVBoxLayout()
+        # pathViewLayout = QVBoxLayout()
         
-        calPathBtn = QPushButton("Determine Possible Crossing Paths")
+        # calPathBtn = QPushButton("Determine Possible Crossing Paths")
         # viewPath = QCheckBox("Show Paths")
         # viewPath.setChecked(True)
-        calPathBtn.clicked.connect(self.calPaths)
-        pathViewLayout.addWidget(calPathBtn)
+        # calPathBtn.clicked.connect(self.calPaths)
+        # pathViewLayout.addWidget(calPathBtn)
         # pathViewLayout.addWidget(viewPath)
-        self.pathTbl = QTableWidget(0,4)
-        header_labels = ['Path', 'Length', 'Duration', 'Significance']
-        self.pathTbl.setHorizontalHeaderLabels(header_labels)
-        self.pathTbl.setFixedSize(500,300)
-        self.pathTbl.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.pathTbl.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.pathTbl.setStyleSheet("QTableWidget::item:selected{ background-color: red }")
-        self.pathTbl.itemSelectionChanged.connect(self.drawPath)
-        # self.pathTbl.setSortingEnabled(True)
-        
-        pathViewLayout.addWidget(self.pathTbl)
-
-        otherpathViewLayout = QVBoxLayout()
-        
-        calOtherPathBtn = QPushButton("Determine Possible Non-crossing Paths")
-        # viewPath = QCheckBox("Show Paths")
-        # viewPath.setChecked(True)
-        calOtherPathBtn.clicked.connect(self.calOtherPaths)
-        otherpathViewLayout.addWidget(calOtherPathBtn)
-        # pathViewLayout.addWidget(viewPath)
-        self.otherpathTbl = QTableWidget(0,4)
+        # self.pathTbl = QTableWidget(0,4)
         # header_labels = ['Path', 'Length', 'Duration', 'Significance']
-        self.otherpathTbl.setHorizontalHeaderLabels(header_labels)
-        self.otherpathTbl.setFixedSize(500,300)
-        self.otherpathTbl.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.otherpathTbl.setSelectionMode(QAbstractItemView.MultiSelection)
-        self.otherpathTbl.setStyleSheet("QTableWidget::item:selected{ background-color: yellow }")
-        self.otherpathTbl.itemSelectionChanged.connect(self.drawOtherPath)
+        # self.pathTbl.setHorizontalHeaderLabels(header_labels)
+        # self.pathTbl.setFixedSize(500,300)
+        # self.pathTbl.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        # self.pathTbl.setSelectionMode(QAbstractItemView.MultiSelection)
+        # self.pathTbl.setStyleSheet("QTableWidget::item:selected{ background-color: red }")
+        # self.pathTbl.itemSelectionChanged.connect(self.drawPath)
         # self.pathTbl.setSortingEnabled(True)
         
-        otherpathViewLayout.addWidget(self.otherpathTbl)
+        # pathViewLayout.addWidget(self.pathTbl)
 
-        box3Layout.addLayout(pathViewLayout)
-        box3Layout.addLayout(otherpathViewLayout)
+        # otherpathViewLayout = QVBoxLayout()
+        
+        # calOtherPathBtn = QPushButton("Determine Possible Non-crossing Paths")
+        # viewPath = QCheckBox("Show Paths")
+        # viewPath.setChecked(True)
+        # calOtherPathBtn.clicked.connect(self.calOtherPaths)
+        # otherpathViewLayout.addWidget(calOtherPathBtn)
+        # pathViewLayout.addWidget(viewPath)
+        # self.otherpathTbl = QTableWidget(0,4)
+        # header_labels = ['Path', 'Length', 'Duration', 'Significance']
+        # self.otherpathTbl.setHorizontalHeaderLabels(header_labels)
+        # self.otherpathTbl.setFixedSize(500,300)
+        # self.otherpathTbl.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        # self.otherpathTbl.setSelectionMode(QAbstractItemView.MultiSelection)
+        # self.otherpathTbl.setStyleSheet("QTableWidget::item:selected{ background-color: yellow }")
+        # self.otherpathTbl.itemSelectionChanged.connect(self.drawOtherPath)
+        # self.pathTbl.setSortingEnabled(True)
+        
+        # otherpathViewLayout.addWidget(self.otherpathTbl)
 
-        layout.addRow(box3Layout)
+        # box3Layout.addLayout(pathViewLayout)
+        # box3Layout.addLayout(otherpathViewLayout)
+
+        # layout.addRow(box3Layout)
 
         return layout
 
@@ -469,24 +436,6 @@ class BorderSim(QWidget):
     def onColChanged(self, value):
         self.number_col = value
 
-    def onPosTDChanged(self, value):
-        self.w_td = value
-
-    def onPosOBChanged(self, value):
-        self.w_ob = value
-
-    def onPosSTChanged(self, value):
-        self.w_st = value
-
-    def onPosDEChanged(self, value):
-        self.w_de = value
-
-    def onNegTDChanged(self, value):
-        self.w_td_n = value
-
-    def onNegDEChanged(self, value):
-        self.w_de_n = value
-
     def onNumPeriodChanged(self, value):
         self.num_period = value
 
@@ -504,8 +453,8 @@ class BorderSim(QWidget):
             self.scene.removeItem(s["obj"])
             
         self.segments = {"segments":[]}
-        while self.grid_width*self.number_col > 480:
-            self.grid_width = self.grid_width*0.95
+        # while self.grid_width*self.number_col > 480:
+        #     self.grid_width = self.grid_width*0.95
 
         for j in range(0,self.number_row):
             
@@ -523,24 +472,23 @@ class BorderSim(QWidget):
                 segment.setRow(j+1)
                 segment.setCol(i+1)
                 segment.setId("Cell_"+str(j+1)+"_"+str(i+1))
-                segment.setDe((self.number_col-(i+1))/(self.number_col-1))
                 if i == 0:
                     segment.setEntry(True)
                 elif i == self.number_col-1:
                     segment.setExit(True)
-                segment.calPositiveM(self.w_td, self.w_ob, self.w_st, self.w_de, self.sum_st)
-                segment.calNegativeM(self.w_td_n, self.w_de_n)
+                segment.calScore(self.accu_tres)
+
                 
                 # rect.setToolTip("td: %f ob: %f st: %f de: %f m: %f" % 
                 #     (segment.getTd(),segment.getOb(),segment.getSt(),segment.getDe(),segment.getM()))
                 
                 self.segments["segments"].append({"row":j+1, "col":i+1, "key":segment.getId(),"obj":segment})
 
-        
-        self.view.setScene(self.scene)
+        self.view_1.setSceneRect(0, 0, (self.number_col+5)*self.grid_width, (self.number_row+5)*self.grid_width)
+        self.view_1.setScene(self.scene)
 
-    def sumSt(self):
-        return sum(x["obj"].getSt() for x in self.segments["segments"])
+    # def sumSt(self):
+    #     return sum(x["obj"].getSt() for x in self.segments["segments"])
 
     def openTDFileDialog(self):
         dlg = QFileDialog()
@@ -563,9 +511,7 @@ class BorderSim(QWidget):
                                 s = self.segments["segments"][d]["obj"]
                                 # print("%i %i" % (i_row,i_col))
                                 s.setTd(float(field))
-                                s.calPositiveM(self.w_td, self.w_ob, self.w_st, self.w_de, self.sum_st)
-                                s.calNegativeM(self.w_td_n, self.w_de_n)
-                
+                                s.calScore(self.accu_tres)
                                 d = d+1
                                 i_col = i_col+1
                         i_row = i_row+1
@@ -578,23 +524,24 @@ class BorderSim(QWidget):
         if dlg.exec_():
             filenames = dlg.selectedFiles()
             f = open(filenames[0], "r")
-			
             with f:
                 i_col = 1
                 i_row = 1
                 d = 0
+
                 for row in csv.reader(f):
-                    if i_row<=self.number_row:
+                    if i_row <= self.number_row:
                         for field in row:
-                            if i_col<=self.number_col:
+                            if i_col <= self.number_col:
                                 s = self.segments["segments"][d]["obj"]
+                                # print("%i %i" % (i_row,i_col))
                                 s.setOb(float(field))
-                                s.calPositiveM(self.w_td, self.w_ob, self.w_st, self.w_de, self.sum_st)
-                                s.calNegativeM(self.w_td, self.w_td_n)
-                                d = d+1
-                                i_col = i_col+1
-                        i_row = i_row+1
+                                s.calScore(self.accu_tres)
+                                d = d + 1
+                                i_col = i_col + 1
+                        i_row = i_row + 1
                         i_col = 1
+
 
     def openSTFileDialog(self):
         dlg = QFileDialog()
@@ -603,24 +550,27 @@ class BorderSim(QWidget):
         if dlg.exec_():
             filenames = dlg.selectedFiles()
             f = open(filenames[0], "r")
-			
             with f:
                 i_col = 1
                 i_row = 1
                 d = 0
+
                 for row in csv.reader(f):
-                    if i_row<=self.number_row:
+                    if i_row == 1:
+                        self.accu_tres = float(row[0])
+
+                    if 1 < i_row <= self.number_row:
                         for field in row:
-                            if i_col<=self.number_col:
+                            if i_col <= self.number_col:
                                 s = self.segments["segments"][d]["obj"]
+                                # print("%i %i" % (i_row,i_col))
                                 s.setSt(float(field))
-                                self.sum_st = self.sumSt()
-                                s.calPositiveM(self.w_td, self.w_ob, self.w_st, self.w_de, self.sum_st)
-                                s.calNegativeM(self.w_td_n, self.w_de_n)
-                                d = d+1
-                                i_col = i_col+1
-                        i_row = i_row+1
-                        i_col = 1                        
+                                s.calScore(self.accu_tres)
+                                d = d + 1
+                                i_col = i_col + 1
+                        i_col = 1
+                    i_row = i_row + 1
+
                 
 
     def changeToNoneView(self):
@@ -637,6 +587,19 @@ class BorderSim(QWidget):
             alpha = 0
             segment.setBrush(QColor(red, green, blue, alpha))
 
+    def changeToTresView(self):
+        # print('td')
+        if self.segments == {"segments": []}:
+            return
+
+        for d in self.segments["segments"]:
+            segment = d["obj"]
+            red = 150
+            green = 150
+            blue = 150
+            alpha = 0 if segment.getTd() < 1 else 255
+            segment.setBrush(QColor(red, green, blue, alpha))
+
     def changeToTDView(self):
         # print('td')
         if self.segments == {"segments":[]}:
@@ -644,11 +607,28 @@ class BorderSim(QWidget):
     
         for d in self.segments["segments"]:
             segment = d["obj"]
-            red = 255
-            green = 0
-            blue = 0
-            alpha = 255*segment.getTd()       
-            segment.setBrush(QColor(red, green, blue, alpha))
+            if segment.getTd() < 1:
+                red = 255
+                green = 0
+                blue = 0
+                alpha = 255*segment.getTd()
+                segment.setBrush(QColor(red, green, blue, alpha))
+
+    def changeToOBView(self):
+        if self.segments == {"segments": []}:
+            return
+
+        for d in self.segments["segments"]:
+            segment = d["obj"]
+            if segment.getOb() < 1:
+                red = 150
+                green = 0
+                blue = 255
+                alpha = 255 * segment.getOb()
+                segment.setBrush(QColor(red, green, blue, alpha))
+
+    def changeToSTView(self):
+        return None
 
     def calPaths(self):
         if self.segments == {"segments":[]}:
@@ -992,9 +972,11 @@ class BorderSim(QWidget):
             s_node = s.getNode()
             s_node.setPos(0,0)
 
-    # def pauseSim(self):
+    def pauseSim(self):
+        return None
 
-    # def resetSim(self):
+    def resetSim(self):
+        return None
 
     
 if __name__ == "__main__":
