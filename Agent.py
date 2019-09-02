@@ -5,12 +5,26 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 
 class Agent(QGraphicsEllipseItem):
-    def __init__(self, type, loc, x, y, w, h, parent=None):
+    def __init__(self, loc, x, y, w, h, parent=None):
         super(Agent, self).__init__(x, y, w, h, parent)
-        self.type = type
         self.curLoc = loc
-        self.sensor = None
-        self.plan = {"path":[]}
+        self.plan = []
+
+    def setCurLoc(self,loc):
+        self.curLoc = loc
+
+    def getCurLoc(self):
+        return self.curLoc
+
+
+
+class PatrolAgent(Agent):
+    def __init__(self, id, loc, x, y, w, h, parent=None):
+        super(PatrolAgent, self).__init__(loc, x, y, w, h, parent)
+        self.id = id
+        self.setPen(QColor(0, 153, 255, 255))
+        self.setBrush(QColor(0, 153, 255, 255))
+        self.setToolTip(self.id)
 
     
 

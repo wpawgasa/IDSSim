@@ -98,6 +98,7 @@ def generateST(argv):
         entry = np.random.choice(entries[0],1)
         exit = np.random.choice(exits[0],1)
         dijk = Dijkstra(g)
+        print("Entry %s" % str(entry[0]))
         traversed_g = dijk.traversing('a_(' + str(entry[0]) + ',0)','a_(' + str(exit[0]) + ',' + str(tdsegments.shape[1] - 1) + ')')
         end_vertex = traversed_g.get_vertex('a_(' + str(exit[0]) + ',' + str(tdsegments.shape[1] - 1) + ')')
         print(end_vertex)

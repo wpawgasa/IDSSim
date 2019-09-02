@@ -13,6 +13,7 @@ class GridCell(QGraphicsRectItem):
         self.st = 0
         # self.de = 0
         self.L = 0
+        self.zone = None
         # self.negative_m = 0
         self.isEntry = False
         self.isExit = False
