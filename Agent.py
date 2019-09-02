@@ -25,7 +25,27 @@ class PatrolAgent(Agent):
         self.setPen(QColor(0, 153, 255, 255))
         self.setBrush(QColor(0, 153, 255, 255))
         self.setToolTip(self.id)
+        self.w_td = np.random.random_sample()
+        self.w_ob = np.random.random_sample()
+        self.w_st = np.random.random_sample()
 
+class TrespasserAgent(Agent):
+    def __init__(self, id, loc, x, y, w, h, parent=None):
+        super(TrespasserAgent, self).__init__(loc, x, y, w, h, parent)
+        self.id = id
+        self.setPen(QColor(237, 76, 62, 255))
+        self.setBrush(QColor(237, 76, 62, 255))
+        self.setToolTip(self.id)
+        self.w_td = np.random.random_sample()
+        self.w_ob = np.random.random_sample()
+        self.w_st = np.random.random_sample()
+
+class Noise(Agent):
+    def __init__(self, id, loc, x, y, w, h, parent=None):
+        super(Noise, self).__init__(loc, x, y, w, h, parent)
+        self.id = id
+        self.setPen(QColor(240, 130, 41, 255))
+        self.setBrush(QColor(240, 130, 41, 255))
     
 
     

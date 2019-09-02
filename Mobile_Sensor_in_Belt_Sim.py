@@ -70,8 +70,8 @@ class BorderSim(QWidget):
         self.show()
 
     def setSimScene(self):
-        self.font = QFont("Consolas")
-        self.font.setPointSize(10)
+        self.font = QFont("Courier")
+        self.font.setPointSize(8)
         self.font.setWeight(25)
 
         self.redpalette = QPalette()
@@ -99,45 +99,52 @@ class BorderSim(QWidget):
         self.display_row.setPos(10, 5)
         self.display_row.setFont(self.font)
         self.display_col = self.infoscene.addText("Column: ")
-        self.display_col.setPos(50, 5)
+        self.display_col.setPos(60, 5)
         self.display_col.setFont(self.font)
         self.display_td = self.infoscene.addText("Difficulty: ")
-        self.display_td.setPos(110, 5)
+        self.display_td.setPos(140, 5)
         self.display_td.setFont(self.font)
         self.display_ob = self.infoscene.addText("Obscurity: ")
-        self.display_ob.setPos(200, 5)
+        self.display_ob.setPos(250, 5)
         self.display_ob.setFont(self.font)
         self.display_st = self.infoscene.addText("Statistic: ")
-        self.display_st.setPos(280, 5)
+        self.display_st.setPos(350, 5)
         self.display_st.setFont(self.font)
         self.display_L = self.infoscene.addText("L: ")
-        self.display_L.setPos(380, 5)
+        self.display_L.setPos(450, 5)
         self.display_L.setFont(self.font)
+        self.display_zone = self.infoscene.addText("Zone: ")
+        self.display_zone.setPos(505, 5)
+        self.display_zone.setFont(self.font)
 
         self.display_row_val = self.infoscene.addText("-")
-        self.display_row_val.setPos(35, 5)
+        self.display_row_val.setPos(40, 5)
         self.display_row_val.setFont(self.font)
         self.display_row_val.setDefaultTextColor(QColor(255, 255, 0, 255))
         self.display_col_val = self.infoscene.addText("-")
-        self.display_col_val.setPos(90, 5)
+        self.display_col_val.setPos(120, 5)
         self.display_col_val.setFont(self.font)
         self.display_col_val.setDefaultTextColor(QColor(255, 255, 0, 255))
         self.display_td_val = self.infoscene.addText("-")
-        self.display_td_val.setPos(173, 5)
+        self.display_td_val.setPos(220, 5)
         self.display_td_val.setFont(self.font)
         self.display_td_val.setDefaultTextColor(QColor(255, 0, 0, 255))
         self.display_ob_val = self.infoscene.addText("-")
-        self.display_ob_val.setPos(258, 5)
+        self.display_ob_val.setPos(320, 5)
         self.display_ob_val.setFont(self.font)
         self.display_ob_val.setDefaultTextColor(QColor(153, 0, 255, 255))
         self.display_st_val = self.infoscene.addText("-")
-        self.display_st_val.setPos(340, 5)
+        self.display_st_val.setPos(420, 5)
         self.display_st_val.setFont(self.font)
         self.display_st_val.setDefaultTextColor(QColor(255, 0, 102, 255))
         self.display_L_val = self.infoscene.addText("-")
-        self.display_L_val.setPos(420, 5)
+        self.display_L_val.setPos(470, 5)
         self.display_L_val.setFont(self.font)
-        self.display_L_val.setDefaultTextColor(QColor(0, 0, 255, 255))
+        self.display_L_val.setDefaultTextColor(QColor(160, 167, 242, 255))
+        self.display_zone_val = self.infoscene.addText("-")
+        self.display_zone_val.setPos(535, 5)
+        self.display_zone_val.setFont(self.font)
+        self.display_zone_val.setDefaultTextColor(QColor(242, 160, 209, 255))
 
         self.view_0 = QGraphicsView(self)
         self.view_0.setFixedSize(600, 30)
@@ -173,6 +180,8 @@ class BorderSim(QWidget):
         self.display_ob_val.setPlainText(str(np.around(cell.getOb(), decimals=2)))
         self.display_st_val.setPlainText(str(np.around(cell.getSt(), decimals=2)))
         self.display_L_val.setPlainText(str(np.around(cell.getL(), decimals=2)))
+        self.display_zone_val.setPlainText(cell.getZone())
+
 
     def handleCellLeave(self, cell):
         # print(cell.getId())
@@ -182,6 +191,7 @@ class BorderSim(QWidget):
         self.display_ob_val.setPlainText("-")
         self.display_st_val.setPlainText("-")
         self.display_L_val.setPlainText("-")
+        self.display_zone_val.setPlainText("-")
 
     def createTabView(self):
         tabView = QTabWidget()
@@ -655,7 +665,7 @@ class BorderSim(QWidget):
                 red = 50
                 green = 150
                 blue = 85
-                alpha = 255 * segment.getSt() / self.accu_tres
+                alpha = 255 - int(np.ceil((self.accu_tres - segment.getSt()) * self.accu_tres/255))
                 segment.setBrush(QColor(red, green, blue, alpha))
 
     def calPaths(self):
@@ -984,7 +994,10 @@ class BorderSim(QWidget):
             return False
 
     def placePatrols(self):
-        self.patrols = []
+        if self.patrols:
+            for p in self.patrols:
+                self.scene.removeItem(p)
+            self.patrols = []
         print("Number of patrols %i" % self.num_patrol)
         print("Is zoning %s" % self.zoning)
         if not self.segments:
@@ -994,17 +1007,18 @@ class BorderSim(QWidget):
         if self.patrol_move_model == 0:
             self.placeRandom()
         elif self.patrol_move_model == 1:
-            self.placeRandom()
+            self.placeOnMiddleLine()
+        elif self.patrol_move_model == 2:
+            self.placeOnDoubleLines()
+        elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
+            if self.zoning:
+                self.placeInZone()
+            else:
+                self.placeRandom()
 
             # min_from_center = np.argmin([np.square(x.getCurLoc().getCol() - self.region_center_x) +
             #                       np.square(x.getCurLoc().getRow() - self.region_center_y) for x in self.patrols])
             # print("Min distance from region center is %i" % min_from_center)
-
-        accu_L = sum(d["obj"].getL() for d in self.segments)
-        avgL_per_zone = accu_L / self.num_patrol
-        print("Total L is %f" % accu_L)
-        print("Avg. L per zone is %f" % avgL_per_zone)
-        expanded = []
 
         return
 
@@ -1023,10 +1037,115 @@ class BorderSim(QWidget):
             for r in range(int(s_p.getRow()) - proximity_guard, int(s_p.getRow()) + proximity_guard):
                 for c in range(int(s_p.getCol()) - proximity_guard, int(s_p.getCol()) + proximity_guard):
                     tilde_alpha = [d for d in bar_alpha if d["row"] == r and d["col"] == c]
-                    bar_alpha[:] = [item for i, item in enumerate(bar_alpha) if i not in tilde_alpha]
+                    for e in tilde_alpha:
+                        if e in bar_alpha:
+                            bar_alpha.remove(e)
+                        # bar_alpha[:] = [item for i, item in enumerate(bar_alpha) if i not in tilde_alpha]
 
     def placeOnMiddleLine(self):
+        middle_col = int(self.number_col/2)+1
+        bar_alpha = [d for d in self.segments if d["obj"].getTd() < 1 and d["col"]==middle_col]
+        for p in range(self.num_patrol):
+            d_p = np.random.choice(bar_alpha, 1)
+            s_p = d_p[0]["obj"]
+            patrolagent = PatrolAgent("patrol_" + str(p + 1), s_p,
+                                      self.pos_x + (int(s_p.getCol() - 1) * self.grid_width),
+                                      self.pos_y + (int(s_p.getRow()) - 1) * self.grid_width,
+                                      self.grid_width, self.grid_width)
+            self.patrols.append(patrolagent)
+            self.scene.addItem(patrolagent)
+
+    def placeOnDoubleLines(self):
+        a = divmod(int(np.ceil(self.number_col*1/4)),5)
+        b = divmod(int(np.ceil(self.number_col*3/4)),5)
+        first_col = a[0]*5+1
+        second_col = b[0]*5+1
+        bar_alpha = [d for d in self.segments if d["obj"].getTd() < 1 and (d["col"] == first_col or d["col"] == second_col)]
+        for p in range(self.num_patrol):
+            d_p = np.random.choice(bar_alpha, 1)
+            s_p = d_p[0]["obj"]
+            patrolagent = PatrolAgent("patrol_" + str(p + 1), s_p,
+                                      self.pos_x + (int(s_p.getCol() - 1) * self.grid_width),
+                                      self.pos_y + (int(s_p.getRow()) - 1) * self.grid_width,
+                                      self.grid_width, self.grid_width)
+            self.patrols.append(patrolagent)
+            self.scene.addItem(patrolagent)
+
+    def placeInZone(self):
+        accu_L = sum(d["obj"].getL() for d in self.segments)
+        avgL_per_zone = accu_L / self.num_patrol
+        print("Total L is %f" % accu_L)
+        print("Avg. L per zone is %f" % avgL_per_zone)
         bar_alpha = [d for d in self.segments if d["obj"].getTd() < 1]
+        expanded = []
+        expanding = []
+        nextexpand = []
+        row = 1
+        col = 1
+        first_segment = None
+        for r in range(self.number_row):
+            d = self.findSegment(r+1, 1)
+            if d["obj"].getTd() < 1:
+                first_segment = d
+                break
+
+        # first_segment = self.findSegment(row, col)
+        expanding.append(first_segment)
+        for p in range(self.num_patrol-1):
+            accu_L_p = 0
+            bar_alpha_p = []
+            while accu_L_p < avgL_per_zone:
+                for e in expanding:
+                    if e in bar_alpha:
+                        s_e = e["obj"]
+                        s_e.setZone("patrol_" + str(p + 1))
+                        accu_L_p = accu_L_p + s_e.getL()
+                        bar_alpha_p.append(e)
+                    expanded.append(e)
+                    next_segments = self.findSurrounding(e["row"], e["col"])
+                    for e0 in expanded:
+                        if e0 in next_segments:
+                            next_segments.remove(e0)
+                        # next_segments = [item for i, item in enumerate(next_segments) if i not in expanded]
+                    for e0 in expanding:
+                        if e0 in next_segments:
+                            next_segments.remove(e0)
+                        # next_segments = [item for i, item in enumerate(next_segments) if i not in expanding]
+                    for e0 in nextexpand:
+                        if e0 in next_segments:
+                            next_segments.remove(e0)
+                        # next_segments = [item for i, item in enumerate(next_segments) if i not in nextexpand]
+                    nextexpand.extend(next_segments)
+
+                expanding = []
+                expanding.extend(nextexpand)
+                nextexpand = []
+
+            d_p = np.random.choice(bar_alpha_p, 1)
+            s_p = d_p[0]["obj"]
+            patrolagent = PatrolAgent("patrol_" + str(p + 1), s_p,
+                                      self.pos_x + (int(s_p.getCol() - 1) * self.grid_width),
+                                      self.pos_y + (int(s_p.getRow()) - 1) * self.grid_width,
+                                      self.grid_width, self.grid_width)
+            self.patrols.append(patrolagent)
+            self.scene.addItem(patrolagent)
+            for e1 in bar_alpha_p:
+                if e1 in bar_alpha:
+                    bar_alpha.remove(e1)
+
+        for e in bar_alpha:
+            s_e = e["obj"]
+            s_e.setZone("patrol_" + str(self.num_patrol))
+
+        d_p = np.random.choice(bar_alpha, 1)
+        s_p = d_p[0]["obj"]
+        patrolagent = PatrolAgent("patrol_" + str(self.num_patrol), s_p,
+                                  self.pos_x + (int(s_p.getCol() - 1) * self.grid_width),
+                                  self.pos_y + (int(s_p.getRow()) - 1) * self.grid_width,
+                                  self.grid_width, self.grid_width)
+        self.patrols.append(patrolagent)
+        self.scene.addItem(patrolagent)
+
 
     def findSegment(self, i, j):
         value = [d for d in self.segments if d["row"] == i and d["col"] == j]
@@ -1036,6 +1155,15 @@ class BorderSim(QWidget):
             return value[0]
         else:
             return None
+
+    def findSurrounding(self, i, j):
+        return [d for d in self.segments if ((d["row"] == i-1 and d["col"] == j-1) or (d["row"] == i-1 and d["col"] == j)
+                or (d["row"] == i-1 and d["col"] == j+1) or (d["row"] == i and d["col"] == j+1)
+                or (d["row"] == i+1 and d["col"] == j+1) or (d["row"] == i+1 and d["col"] == j)
+                or (d["row"] == i+1 and d["col"] == j-1) or (d["row"] == i and d["col"] == j-1))
+                and d["obj"].getTd() < 1]
+
+
 
     def startSim(self):
         for s in self.patrollers:

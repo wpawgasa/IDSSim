@@ -110,3 +110,9 @@ class GridCell(QGraphicsRectItem):
 
     def getExit(self):
         return self.isExit
+
+    def setZone(self, z):
+        self.zone = z
+
+    def getZone(self):
+        return self.zone
