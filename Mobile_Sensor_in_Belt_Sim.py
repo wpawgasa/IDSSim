@@ -7,6 +7,7 @@ from GridCell import *
 from Agent import *
 from Path import *
 from functools import partial
+from dijkstra import Vertex, Graph, Dijkstra
 
 sip.setapi('QString', 2)
 sip.setapi('QVariant', 2)
@@ -31,8 +32,12 @@ class BorderSim(QWidget):
 
         self.patrol_move_model = 0
         self.trespasser_move_model = 0
+        self.trespasser_arrival_rate = 0
+        self.noise_rate = 0
 
         self.num_patrol = 0
+        self.detection_coef = 1.00
+        self.investigation_time = 0
 
         self.entry_prob = []
         self.totalStat = 0
@@ -58,6 +63,11 @@ class BorderSim(QWidget):
         self.num_period = 1
         self.period_len = 100
         self.stage_duration = 0.1
+
+        self.timer = QTimer()
+        self.curP = 0
+        self.curT = 0
+        self.timer.timeout.connect(self.simulate)
 
         layout = QHBoxLayout()
         self.sceneWidget = QWidget()
@@ -146,21 +156,48 @@ class BorderSim(QWidget):
         self.display_zone_val.setFont(self.font)
         self.display_zone_val.setDefaultTextColor(QColor(242, 160, 209, 255))
 
-        self.view_0 = QGraphicsView(self)
-        self.view_0.setFixedSize(600, 30)
-        self.view_0.setSceneRect(0, 0, 600, 30)
+        self.display_cur_period = self.infoscene.addText("Period: ")
+        self.display_cur_period.setPos(10, 16)
+        self.display_cur_period.setFont(self.font)
 
-        self.view_0.fitInView(0, 0, 600, 30, Qt.KeepAspectRatio)
+        self.display_cur_stage = self.infoscene.addText("Stage: ")
+        self.display_cur_stage.setPos(100, 16)
+        self.display_cur_stage.setFont(self.font)
+
+        self.display_sim_status = self.infoscene.addText("Status: ")
+        self.display_sim_status.setPos(200, 16)
+        self.display_sim_status.setFont(self.font)
+
+        self.display_cur_period_val = self.infoscene.addText("0")
+        self.display_cur_period_val.setPos(60, 16)
+        self.display_cur_period_val.setFont(self.font)
+        self.display_cur_period_val.setDefaultTextColor(QColor(197, 247, 126, 255))
+
+        self.display_cur_stage_val = self.infoscene.addText("0")
+        self.display_cur_stage_val.setPos(160, 16)
+        self.display_cur_stage_val.setFont(self.font)
+        self.display_cur_stage_val.setDefaultTextColor(QColor(197, 247, 126, 255))
+
+        self.display_sim_status_val = self.infoscene.addText("Stopped")
+        self.display_sim_status_val.setPos(260, 16)
+        self.display_sim_status_val.setFont(self.font)
+        self.display_sim_status_val.setDefaultTextColor(QColor(224, 173, 247, 255))
+
+        self.view_0 = QGraphicsView(self)
+        self.view_0.setFixedSize(630, 40)
+        self.view_0.setSceneRect(0, 0, 630, 40)
+
+        self.view_0.fitInView(0, 0, 630, 40, Qt.KeepAspectRatio)
 
         self.view_0.setScene(self.infoscene)
         self.view_0.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view_0.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self.view_1 = QGraphicsView(self)
-        self.view_1.setFixedSize(600, 730)
+        self.view_1.setFixedSize(630, 720)
         # self.view_1.setSceneRect(0,0,800,1000)
 
-        self.view_1.fitInView(0, 0, 600, 730, Qt.KeepAspectRatio)
+        self.view_1.fitInView(0, 0, 630, 720, Qt.KeepAspectRatio)
 
         self.view_1.setScene(self.scene)
         self.view_1.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -170,7 +207,7 @@ class BorderSim(QWidget):
         layout.addWidget(self.view_0)
         layout.addWidget(self.view_1)
         self.sceneWidget.setLayout(layout)
-        self.sceneWidget.setFixedSize(600, 780)
+        self.sceneWidget.setFixedSize(630, 780)
 
     def handleCellEntered(self, cell):
         # print(cell.getId())
@@ -181,7 +218,6 @@ class BorderSim(QWidget):
         self.display_st_val.setPlainText(str(np.around(cell.getSt(), decimals=2)))
         self.display_L_val.setPlainText(str(np.around(cell.getL(), decimals=2)))
         self.display_zone_val.setPlainText(cell.getZone())
-
 
     def handleCellLeave(self, cell):
         # print(cell.getId())
@@ -339,6 +375,7 @@ class BorderSim(QWidget):
         trespasserArrRate.setRange(0, 100)
         trespasserArrRate.setSingleStep(1)
         trespasserArrRate.setValue(0)
+        trespasserArrRate.valueChanged.connect(self.setTrespasserArrivalRate)
         trespasserLayout.addRow("Arrival Rate: ", trespasserArrRate)
         trespasserGroupBox.setLayout(trespasserLayout)
 
@@ -355,6 +392,7 @@ class BorderSim(QWidget):
         noiseRate.setRange(0, 100)
         noiseRate.setSingleStep(1)
         noiseRate.setValue(0)
+        noiseRate.valueChanged.connect(self.setNoiseRate)
         noiseLayout.addRow("Noise Rate: ", noiseRate)
         noiseGroupBox.setLayout(noiseLayout)
 
@@ -363,12 +401,28 @@ class BorderSim(QWidget):
 
         patrollerGroupBox = QGroupBox("Patrol Agent")
         patrollerLayout = QFormLayout()
+
         patrollerNumber = QSpinBox()
         patrollerNumber.setRange(0, 100)
         patrollerNumber.setSingleStep(1)
         patrollerNumber.setValue(0)
         patrollerNumber.valueChanged.connect(self.setPatrolNumber)
         patrollerLayout.addRow("Number of patrols: ", patrollerNumber)
+
+        detectionCoef = QDoubleSpinBox()
+        detectionCoef.setRange(0.00, 1.00)
+        detectionCoef.setSingleStep(0.01)
+        detectionCoef.setDecimals(2)
+        detectionCoef.setValue(1.00)
+        detectionCoef.valueChanged.connect(self.setDetectionCoef)
+        patrollerLayout.addRow("Detection Coefficient: ", detectionCoef)
+
+        investigationTime = QSpinBox()
+        investigationTime.setRange(0, 100)
+        investigationTime.setSingleStep(1)
+        investigationTime.setValue(0)
+        investigationTime.valueChanged.connect(self.setPatrolNumber)
+        patrollerLayout.addRow("Investigation time: ", investigationTime)
 
         patrollerMovementModel = QComboBox()
         patrollerMovementModel.addItem("Random", 0)
@@ -391,6 +445,18 @@ class BorderSim(QWidget):
         layout.addWidget(patrollerGroupBox)
         return layout
 
+    def setTrespasserArrivalRate(self, v):
+        self.trespasser_arrival_rate = v
+
+    def setNoiseRate(self, v):
+        self.noise_rate = v
+
+    def setDetectionCoef(self, v):
+        self.detection_coef = v
+
+    def setInvestigationTime(self, v):
+        self.investigation_time = v
+
     def setTrespasserMovementModel(self, v):
         self.trespasser_move_model = v
         print("Trespasser movement model is set to %i" % v)
@@ -411,23 +477,23 @@ class BorderSim(QWidget):
     def createSimCtrlLayOut(self):
         layout = QFormLayout()
         numPeriod = QSpinBox()
-        numPeriod.setRange(0, 100)
+        numPeriod.setRange(0, 500)
         numPeriod.setSingleStep(1)
         numPeriod.setValue(1)
         numPeriod.valueChanged.connect(self.onNumPeriodChanged)
-        layout.addRow("Number of Periods", numPeriod)
-        operPeriod = QSpinBox()
-        operPeriod.setRange(0, 5000)
-        operPeriod.setSingleStep(10)
-        operPeriod.setValue(100)
-        operPeriod.valueChanged.connect(self.onPeriodLengthChanged)
-        layout.addRow("Period length", operPeriod)
+        layout.addRow("Number of operation periods", numPeriod)
+        numStages = QSpinBox()
+        numStages.setRange(0, 5000)
+        numStages.setSingleStep(10)
+        numStages.setValue(100)
+        numStages.valueChanged.connect(self.onPeriodLengthChanged)
+        layout.addRow("Number of time stages per operation", numStages)
         stageDuration = QDoubleSpinBox()
         stageDuration.setRange(0, 1)
         stageDuration.setSingleStep(0.01)
         stageDuration.setValue(0.1)
         stageDuration.valueChanged.connect(self.onStageDurationChanged)
-        layout.addRow("Stage Duration", stageDuration)
+        layout.addRow("Time Stage Duration (ms)", stageDuration)
 
         simcontrolBtn = QHBoxLayout()
         runButton = QPushButton("Run Simulation")
@@ -436,24 +502,27 @@ class BorderSim(QWidget):
         pauseButton.clicked.connect(self.pauseSim)
         resetButton = QPushButton("Reset Simulation")
         resetButton.clicked.connect(self.resetSim)
+        stopButton = QPushButton("Stop Simulation")
+        stopButton.clicked.connect(self.stopSim)
         simcontrolBtn.addWidget(runButton)
         simcontrolBtn.addWidget(pauseButton)
         simcontrolBtn.addWidget(resetButton)
+        simcontrolBtn.addWidget(stopButton)
         layout.addRow(simcontrolBtn)
 
-        simStatusGroupBox = QGroupBox("Simulation Status")
-        simStatusLayout = QHBoxLayout()
-        simCurrentPeriodLabel = QLabel("Current Period")
-        simCurrentPeriod = QLabel(str(0))
-        simCurrentStageLabel = QLabel("Current Stage")
-        simCurrentStage = QLabel(str(0))
-        simStatusLayout.addWidget(simCurrentPeriodLabel)
-        simStatusLayout.addWidget(simCurrentPeriod)
-        simStatusLayout.addWidget(simCurrentStageLabel)
-        simStatusLayout.addWidget(simCurrentStage)
-        simStatusGroupBox.setLayout(simStatusLayout)
-
-        layout.addRow(simStatusGroupBox)
+        # simStatusGroupBox = QGroupBox("Simulation Status")
+        # simStatusLayout = QHBoxLayout()
+        # simCurrentPeriodLabel = QLabel("Current Period")
+        # simCurrentPeriod = QLabel(str(0))
+        # simCurrentStageLabel = QLabel("Current Stage")
+        # simCurrentStage = QLabel(str(0))
+        # simStatusLayout.addWidget(simCurrentPeriodLabel)
+        # simStatusLayout.addWidget(simCurrentPeriod)
+        # simStatusLayout.addWidget(simCurrentStageLabel)
+        # simStatusLayout.addWidget(simCurrentStage)
+        # simStatusGroupBox.setLayout(simStatusLayout)
+        #
+        # layout.addRow(simStatusGroupBox)
 
         return layout
 
@@ -665,7 +734,7 @@ class BorderSim(QWidget):
                 red = 50
                 green = 150
                 blue = 85
-                alpha = 255 - int(np.ceil((self.accu_tres - segment.getSt()) * self.accu_tres/255))
+                alpha = 255 - int(np.ceil((self.accu_tres - segment.getSt()) * self.accu_tres / 255))
                 segment.setBrush(QColor(red, green, blue, alpha))
 
     def calPaths(self):
@@ -1043,8 +1112,8 @@ class BorderSim(QWidget):
                         # bar_alpha[:] = [item for i, item in enumerate(bar_alpha) if i not in tilde_alpha]
 
     def placeOnMiddleLine(self):
-        middle_col = int(self.number_col/2)+1
-        bar_alpha = [d for d in self.segments if d["obj"].getTd() < 1 and d["col"]==middle_col]
+        middle_col = int(self.number_col / 2) + 1
+        bar_alpha = [d for d in self.segments if d["obj"].getTd() < 1 and d["col"] == middle_col]
         for p in range(self.num_patrol):
             d_p = np.random.choice(bar_alpha, 1)
             s_p = d_p[0]["obj"]
@@ -1056,11 +1125,12 @@ class BorderSim(QWidget):
             self.scene.addItem(patrolagent)
 
     def placeOnDoubleLines(self):
-        a = divmod(int(np.ceil(self.number_col*1/4)),5)
-        b = divmod(int(np.ceil(self.number_col*3/4)),5)
-        first_col = a[0]*5+1
-        second_col = b[0]*5+1
-        bar_alpha = [d for d in self.segments if d["obj"].getTd() < 1 and (d["col"] == first_col or d["col"] == second_col)]
+        a = divmod(int(np.ceil(self.number_col * 1 / 4)), 5)
+        b = divmod(int(np.ceil(self.number_col * 3 / 4)), 5)
+        first_col = a[0] * 5 + 1
+        second_col = b[0] * 5 + 1
+        bar_alpha = [d for d in self.segments if
+                     d["obj"].getTd() < 1 and (d["col"] == first_col or d["col"] == second_col)]
         for p in range(self.num_patrol):
             d_p = np.random.choice(bar_alpha, 1)
             s_p = d_p[0]["obj"]
@@ -1084,14 +1154,14 @@ class BorderSim(QWidget):
         col = 1
         first_segment = None
         for r in range(self.number_row):
-            d = self.findSegment(r+1, 1)
+            d = self.findSegment(r + 1, 1)
             if d["obj"].getTd() < 1:
                 first_segment = d
                 break
 
         # first_segment = self.findSegment(row, col)
         expanding.append(first_segment)
-        for p in range(self.num_patrol-1):
+        for p in range(self.num_patrol - 1):
             accu_L_p = 0
             bar_alpha_p = []
             while accu_L_p < avgL_per_zone:
@@ -1146,7 +1216,6 @@ class BorderSim(QWidget):
         self.patrols.append(patrolagent)
         self.scene.addItem(patrolagent)
 
-
     def findSegment(self, i, j):
         value = [d for d in self.segments if d["row"] == i and d["col"] == j]
         # value = filter(lambda s: s[0] == key, self.segments["segments"])
@@ -1157,26 +1226,168 @@ class BorderSim(QWidget):
             return None
 
     def findSurrounding(self, i, j):
-        return [d for d in self.segments if ((d["row"] == i-1 and d["col"] == j-1) or (d["row"] == i-1 and d["col"] == j)
-                or (d["row"] == i-1 and d["col"] == j+1) or (d["row"] == i and d["col"] == j+1)
-                or (d["row"] == i+1 and d["col"] == j+1) or (d["row"] == i+1 and d["col"] == j)
-                or (d["row"] == i+1 and d["col"] == j-1) or (d["row"] == i and d["col"] == j-1))
+        return [d for d in self.segments if
+                ((d["row"] == i - 1 and d["col"] == j - 1) or (d["row"] == i - 1 and d["col"] == j)
+                 or (d["row"] == i - 1 and d["col"] == j + 1) or (d["row"] == i and d["col"] == j + 1)
+                 or (d["row"] == i + 1 and d["col"] == j + 1) or (d["row"] == i + 1 and d["col"] == j)
+                 or (d["row"] == i + 1 and d["col"] == j - 1) or (d["row"] == i and d["col"] == j - 1))
                 and d["obj"].getTd() < 1]
 
-
-
     def startSim(self):
-        for s in self.patrollers:
-            startA = s.getStartLoc()
-            s.setCurrentLoc(startA)
-            s_node = s.getNode()
-            s_node.setPos(0, 0)
+        # for s in self.patrollers:
+        #     startA = s.getStartLoc()
+        #     s.setCurrentLoc(startA)
+        #     s_node = s.getNode()
+        #     s_node.setPos(0, 0)
+        self.curP = 1
+        self.curT = 1
+        self.display_sim_status_val.setPlainText("Running")
+        self.timer.start(self.stage_duration * 1000)
 
     def pauseSim(self):
-        return None
+        self.display_sim_status_val.setPlainText("Paused")
+        self.timer.stop()
 
     def resetSim(self):
-        return None
+        self.timer.stop()
+        self.curP = 0
+        self.curT = 0
+        self.display_cur_period_val.setPlainText(str(self.curP))
+        self.display_cur_stage_val.setPlainText(str(self.curT))
+        self.display_sim_status_val.setPlainText("Stopped")
+        self.startSim()
+
+    def stopSim(self):
+        self.timer.stop()
+        self.curP = 0
+        self.curT = 0
+        self.display_sim_status_val.setPlainText("Stopped")
+
+    def simulate(self):
+        if self.curT > self.period_len:
+            self.curT = 1
+            self.curP = self.curP + 1
+        if self.curP > self.num_period:
+            self.stopSim()
+            return
+
+        self.display_cur_period_val.setPlainText(str(self.curP))
+        self.display_cur_stage_val.setPlainText(str(self.curT))
+
+        if self.curT == 1:
+            self.generateTrespassers()
+
+        for k in self.trespassers:
+            if k.getArrTime() == self.curT:
+                self.scene.addItem(k)
+            elif k.getArrTime() < self.curT:
+                if self.trespasser_move_model == 1 or self.trespasser_move_model == 2:
+                    k_point = k.pos()
+                    s = k.getSegmentFromPlan(self.curT)
+                    k.setPos(k_point.x() + (s.getCol() - k.getCurLoc().getCol()) * self.grid_width,
+                             k_point.y() + (s.getRow() - k.getCurLoc().getRow()) * self.grid_width)
+                    k.setCurLoc(s)
+
+        self.curT = self.curT + 1
+
+    def generateTrespassers(self):
+        # Poisson number of arrivals in a period
+        n = np.random.poisson(self.trespasser_arrival_rate)
+        entries = [d for d in self.segments if d["col"] == 1 and d["obj"].getTd() < 1]
+        exits = [d for d in self.segments if d["col"] == self.number_col and d["obj"].getTd() < 1]
+        for i in range(n):
+            # trespasser's poisson arrival time
+            arr_time = np.floor(np.random.uniform(1, self.period_len))
+            # random select entry segment
+            entry_s = np.random.choice(entries, 1)
+            exit_s = np.random.choice(exits, 1)
+            s_en = entry_s[0]["obj"]
+            s_ex = exit_s[0]["obj"]
+            # add new trespasser
+            trespasser = TrespasserAgent('tres_' + str(i + 1), s_en, s_ex, arr_time,
+                                         self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
+                                         self.pos_y + (int(s_en.getRow()) - 1) * self.grid_width,
+                                         self.grid_width, self.grid_width)
+            if self.trespasser_move_model == 1 or self.trespasser_move_model == 2:
+                self.findTrespasserPath(trespasser, s_en, s_ex)
+            self.trespassers.append(trespasser)
+
+    def findTrespasserPath(self, t, en, ex):
+        # construct graph
+        g = Graph()
+        for x in range(1, self.number_row + 1):
+            for y in range(1, self.number_col + 1):
+                d = self.findSegment(x, y)
+                if d["obj"].getTd() < 1.0:
+                    g.add_vertex('a_(' + str(x) + ',' + str(y) + ')', x, y)
+
+        vertice_keys = g.get_vertices()
+        for key in vertice_keys:
+            vertex = g.get_vertex(key)
+            # print(vertex)
+            v_i = vertex.get_i()
+            v_j = vertex.get_j()
+            v_1 = self.findSegment(v_i - 1, v_j - 1)
+            v_2 = self.findSegment(v_i - 1, v_j)
+            v_3 = self.findSegment(v_i - 1, v_j + 1)
+            v_4 = self.findSegment(v_i, v_j + 1)
+            v_5 = self.findSegment(v_i + 1, v_j + 1)
+            v_6 = self.findSegment(v_i + 1, v_j)
+            v_7 = self.findSegment(v_i + 1, v_j - 1)
+            v_8 = self.findSegment(v_i, v_j - 1)
+            if (v_i - 1 >= 1 and v_j - 1 >= 1) and v_1["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i - 1) + ',' + str(v_j - 1) + ')')
+                cost = t.getWTd() * v_1["obj"].getTd() + t.getWOb() * (1 - v_1["obj"].getOb()) + \
+                       t.getWSt() * (1 - v_1["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i - 1 >= 1) and v_2["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i - 1) + ',' + str(v_j) + ')')
+                cost = t.getWTd() * v_2["obj"].getTd() + t.getWOb() * (1 - v_2["obj"].getOb()) + \
+                       t.getWSt() * (1 - v_2["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i - 1 >= 1 and v_j + 1 <= self.number_col) and v_3["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i - 1) + ',' + str(v_j + 1) + ')')
+                cost = t.getWTd() * v_3["obj"].getTd() + t.getWOb() * (1 - v_3["obj"].getOb()) + \
+                       t.getWSt() * (1 - v_3["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_j + 1 <= self.number_col) and v_4["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i) + ',' + str(v_j + 1) + ')')
+                cost = t.getWTd() * v_4["obj"].getTd() + t.getWOb() * (1 - v_4["obj"].getOb()) + \
+                       t.getWSt() * (1 - v_4["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i + 1 <= self.number_row and v_j + 1 <= self.number_col) and v_5["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i + 1) + ',' + str(v_j + 1) + ')')
+                cost = t.getWTd() * v_5["obj"].getTd() + t.getWOb() * (1 - v_5["obj"].getOb()) + \
+                       t.getWSt() * (1 - v_5["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i + 1 <= self.number_row) and v_6["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i + 1) + ',' + str(v_j) + ')')
+                cost = t.getWTd() * v_6["obj"].getTd() + t.getWOb() * (1 - v_6["obj"].getOb()) + \
+                       t.getWSt() * (1 - v_6["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i + 1 <= self.number_row and v_j - 1 >= 1) and v_7["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i + 1) + ',' + str(v_j - 1) + ')')
+                cost = t.getWTd() * v_7["obj"].getTd() + t.getWOb() * (1 - v_7["obj"].getOb()) + \
+                       t.getWSt() * (1 - v_7["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_j - 1 >= 1) and v_8["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i) + ',' + str(v_j - 1) + ')')
+                cost = t.getWTd() * v_8["obj"].getTd() + t.getWOb() * (1 - v_8["obj"].getOb()) + \
+                       t.getWSt() * (1 - v_8["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+
+        dijk = Dijkstra(g)
+        entry_vertex = 'a_(' + str(en.getRow()) + ',1)'
+        exit_vertex = 'a_(' + str(ex.getRow()) + ',' + str(self.number_col) + ')'
+        traversed_g = dijk.traversing(entry_vertex, exit_vertex)
+        end_vertex = traversed_g.get_vertex(exit_vertex)
+        path = [end_vertex]
+        dijk.shortest(end_vertex, path)
+        stage = t.getArrTime()
+        for s in path[::-1]:
+            d = self.findSegment(s.get_i(), s.get_j())
+            t.addToPlan(stage, d["obj"])
+            stage = stage + 1
 
 
 if __name__ == "__main__":
