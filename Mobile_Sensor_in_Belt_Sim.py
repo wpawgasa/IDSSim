@@ -1233,6 +1233,11 @@ class BorderSim(QWidget):
                  or (d["row"] == i + 1 and d["col"] == j - 1) or (d["row"] == i and d["col"] == j - 1))
                 and d["obj"].getTd() < 1]
 
+    def findUpDownSegments(self, i, j):
+        return [d for d in self.segments if
+                ((d["row"] == i - 1 and d["col"] == j) or (d["row"] == i + 1 and d["col"] == j))
+                and d["obj"].getTd() < 1]
+
     def startSim(self):
         # for s in self.patrollers:
         #     startA = s.getStartLoc()
@@ -1255,6 +1260,17 @@ class BorderSim(QWidget):
         self.display_cur_period_val.setPlainText(str(self.curP))
         self.display_cur_stage_val.setPlainText(str(self.curT))
         self.display_sim_status_val.setPlainText("Stopped")
+        for t in self.trespassers:
+            if t.getStatus() == 1:
+                self.scene.removeItem(t)
+
+        for p in self.patrols:
+            s_init = p.getInitLoc()
+            p.setPos(self.pos_x + (int(s_init.getCol() - 1) * self.grid_width),
+                     self.pos_y + (int(s_init.getRow()) - 1) * self.grid_width)
+
+
+        self.trespassers = []
         self.startSim()
 
     def stopSim(self):
@@ -1262,6 +1278,16 @@ class BorderSim(QWidget):
         self.curP = 0
         self.curT = 0
         self.display_sim_status_val.setPlainText("Stopped")
+        for t in self.trespassers:
+            if t.getStatus() == 1:
+                self.scene.removeItem(t)
+
+        for p in self.patrols:
+            s_init = p.getInitLoc()
+            p.setPos(self.pos_x + (int(s_init.getCol() - 1) * self.grid_width),
+                     self.pos_y + (int(s_init.getRow()) - 1) * self.grid_width)
+
+        self.trespassers = []
 
     def simulate(self):
         if self.curT > self.period_len:
@@ -1277,16 +1303,44 @@ class BorderSim(QWidget):
         if self.curT == 1:
             self.generateTrespassers()
 
+
         for k in self.trespassers:
-            if k.getArrTime() == self.curT:
+            if k.getArrTime() == self.curT and k.getStatus() == 0:
+                s_cur = k.getInitLoc()
+                s_cur.setFp(0)
+                k.setStatus(1)
                 self.scene.addItem(k)
-            elif k.getArrTime() < self.curT:
+
+            elif k.getArrTime() < self.curT and k.getStatus() == 1 and k.getCurLoc().getCol() != self.number_col:
+                k_point = k.pos()
+                s_cur = k.getCurLoc()
+                s_cur.setFp(s_cur.getFp() + 1)
                 if self.trespasser_move_model == 1 or self.trespasser_move_model == 2:
-                    k_point = k.pos()
                     s = k.getSegmentFromPlan(self.curT)
-                    k.setPos(k_point.x() + (s.getCol() - k.getCurLoc().getCol()) * self.grid_width,
-                             k_point.y() + (s.getRow() - k.getCurLoc().getRow()) * self.grid_width)
+                    k.setPos(k_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
+                             k_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
                     k.setCurLoc(s)
+                    s.setFp(0)
+                else:
+                    surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+                    d_random = np.random.choice(surroundings,1)
+                    s_random = d_random[0]["obj"]
+                    k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+                             k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+                    k.setCurLoc(s_random)
+                    s_random.setFp(0)
+
+            elif k.getCurLoc().getCol() == self.number_col:
+                k.setStatus(2)
+                self.scene.removeItem(k)
+
+        # for l in self.patrols:
+        #     if self.patrol_move_model != 0:
+        #         return
+        #     else:
+        #         return
+
+
 
         self.curT = self.curT + 1
 
@@ -1311,6 +1365,17 @@ class BorderSim(QWidget):
             if self.trespasser_move_model == 1 or self.trespasser_move_model == 2:
                 self.findTrespasserPath(trespasser, s_en, s_ex)
             self.trespassers.append(trespasser)
+
+    def generatePatrolPlan(self):
+        if self.patrol_move_model == 0:
+            return
+
+        for p in self.patrols:
+            if self.patrol_move_model == 1 or self.patrol_move_model == 2:
+                self.barrierPath(p)
+            # elif self.patrol_move_model == 3:
+
+
 
     def findTrespasserPath(self, t, en, ex):
         # construct graph
@@ -1388,6 +1453,23 @@ class BorderSim(QWidget):
             d = self.findSegment(s.get_i(), s.get_j())
             t.addToPlan(stage, d["obj"])
             stage = stage + 1
+
+    def barrierPath(self, p):
+        s_c = p.getInitLoc()
+        p.addToPlan(1, s_c)
+        for t in range(2, self.period_len+1):
+            d_a = self.findUpDownSegments(s_c.getRow(),s_c.getCol())
+            d_s = np.random.choice(d_a,1)
+            s_c = d_s[0]["obj"]
+            p.addToPlan(t, s_c)
+
+    def heuristicPath(self, p):
+        s_c = p.getInitLoc()
+        p.addToPlan(1, s_c)
+        # for t in range(2, self.period_len + 1):
+
+
+
 
 
 if __name__ == "__main__":

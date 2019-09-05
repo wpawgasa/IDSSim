@@ -55,6 +55,7 @@ class TrespasserAgent(Agent):
         self.arr_time = arr_time
         self.entry_s = loc_en
         self.exit_s = loc_ex
+        self.status = 0 # 0 not arrive yet, 1 in region, 2 exit region, 3 detected
 
     def getWTd(self):
         return self.w_td
@@ -67,6 +68,12 @@ class TrespasserAgent(Agent):
 
     def getArrTime(self):
         return self.arr_time
+
+    def setStatus(self, status):
+        self.status = status
+
+    def getStatus(self):
+        return self.status
 
 class Noise(Agent):
     def __init__(self, id, loc, x, y, w, h, parent=None):

@@ -14,6 +14,7 @@ class GridCell(QGraphicsRectItem):
         # self.de = 0
         self.L = 0
         self.zone = None
+        self.fp = None
         # self.negative_m = 0
         self.isEntry = False
         self.isExit = False
@@ -116,3 +117,9 @@ class GridCell(QGraphicsRectItem):
 
     def getZone(self):
         return self.zone
+
+    def setFp(self, f):
+        self.fp = f
+
+    def getFp(self):
+        return self.fp
