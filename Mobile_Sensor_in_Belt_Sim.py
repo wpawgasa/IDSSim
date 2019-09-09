@@ -38,18 +38,20 @@ class BorderSim(QWidget):
         self.num_patrol = 0
         self.detection_coef = 1.00
         self.investigation_time = 0
+        self.repeat_guard = 0
+        self.comm_success_rate = 0.8
 
         self.entry_prob = []
         self.totalStat = 0
         # self.targetlifetime = 0.5 #target is active after time period
 
-        self.number_i_entry = 0  # number of trespasser entering the area during the period
-        self.number_o_entry = 0  # number of noise generated in the area during the period
-        self.number_i_exit = 0  # number of trespasser exiting the area through the exit line
+        self.number_t_entry = 0  # number of trespasser entering the area during the period
+        self.number_n_entry = 0  # number of noise generated in the area during the period
+        self.number_t_exit = 0  # number of trespasser exiting the area through the exit line
         # self.number_o_exit = 0
-        self.number_i_detected = 0  # number of intruder detected by a sensors (true detection)
-        self.number_o_detected = 0  # number of intruder detected by a sensors (false detection)
-
+        self.number_t_detected = 0  # number of intruder detected by a sensors (true detection)
+        self.number_n_detected = 0  # number of intruder detected by a sensors (false detection)
+        self.trespasser_found = False
         self.accu_tres = 0
 
         self.zoning = False
@@ -424,6 +426,21 @@ class BorderSim(QWidget):
         investigationTime.valueChanged.connect(self.setPatrolNumber)
         patrollerLayout.addRow("Investigation time: ", investigationTime)
 
+        commSuccessRate = QDoubleSpinBox()
+        commSuccessRate.setRange(0.0, 1.0)
+        commSuccessRate.setSingleStep(0.1)
+        commSuccessRate.setDecimals(1)
+        commSuccessRate.setValue(0.8)
+        commSuccessRate.valueChanged.connect(self.setCommSuccessRate)
+        patrollerLayout.addRow("Communication Success Rate: ", commSuccessRate)
+
+        repeatGuard = QSpinBox()
+        repeatGuard.setRange(0, 100)
+        repeatGuard.setSingleStep(5)
+        repeatGuard.setValue(0)
+        repeatGuard.valueChanged.connect(self.setRepeatGuard)
+        patrollerLayout.addRow("Re-patrol guard (% of period length): ", repeatGuard)
+
         patrollerMovementModel = QComboBox()
         patrollerMovementModel.addItem("Random", 0)
         patrollerMovementModel.addItem("Single Barrier", 1)
@@ -433,7 +450,7 @@ class BorderSim(QWidget):
         patrollerMovementModel.currentIndexChanged.connect(self.setPatrolMovementModel)
         patrollerLayout.addRow("Movement Model: ", patrollerMovementModel)
 
-        patrollerZoning = QCheckBox("Apply zoning to heuristic planning and POMDP planning")
+        patrollerZoning = QCheckBox("Apply zoning to random, heuristic planning and POMDP planning")
         patrollerZoning.stateChanged.connect(lambda: self.setZoning(patrollerZoning))
         patrollerLayout.addRow(patrollerZoning)
         placePatroller = QPushButton("Place Patrollers")
@@ -456,6 +473,12 @@ class BorderSim(QWidget):
 
     def setInvestigationTime(self, v):
         self.investigation_time = v
+
+    def setRepeatGuard(self, v):
+        self.repeat_guard = v
+
+    def setCommSuccessRate(self, v):
+        self.comm_success_rate = v
 
     def setTrespasserMovementModel(self, v):
         self.trespasser_move_model = v
@@ -1074,7 +1097,10 @@ class BorderSim(QWidget):
             return
 
         if self.patrol_move_model == 0:
-            self.placeRandom()
+            if self.zoning:
+                self.placeInZone()
+            else:
+                self.placeRandom()
         elif self.patrol_move_model == 1:
             self.placeOnMiddleLine()
         elif self.patrol_move_model == 2:
@@ -1082,14 +1108,37 @@ class BorderSim(QWidget):
         elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
             if self.zoning:
                 self.placeInZone()
+                # self.updateGInZone()
             else:
                 self.placeRandom()
+                # self.updateG()
 
             # min_from_center = np.argmin([np.square(x.getCurLoc().getCol() - self.region_center_x) +
             #                       np.square(x.getCurLoc().getRow() - self.region_center_y) for x in self.patrols])
             # print("Min distance from region center is %i" % min_from_center)
 
         return
+
+    # def updateGInZone(self):
+    #     for p in self.patrols:
+    #         d_p = self.findSegmentsInZone(p)
+    #         p.initG(d_p.shape[0])
+    #         for d in d_p:
+    #             d_s = self.findSurroundingInZone(p, d["row"], d["col"])
+    #             for dd in d_s:
+    #                 u = p.getWTd() * (1 - dd["obj"].getTd()) + p.getWOb() * dd["obj"].getOb() + \
+    #                     p.getWSt() * dd["obj"].getSt() / self.accu_tres
+    #                 p.setG(d["row"]*d["col"]-1, dd["row"]*d["col"]-1, u)
+    #
+    # def updateG(self):
+    #     for p in self.patrols:
+    #         p.initG(self.number_row*self.number_col)
+    #         for d in self.segments:
+    #             d_s = self.findSurrounding(d["row"], d["col"])
+    #             for dd in d_s:
+    #                 u = p.getWTd() * (1 - dd["obj"].getTd()) + p.getWOb() * dd["obj"].getOb() + \
+    #                     p.getWSt() * dd["obj"].getSt() / self.accu_tres
+    #                 p.setG(d["row"]*d["col"]-1, dd["row"]*d["col"]-1, u)
 
     def placeRandom(self):
         bar_alpha = [d for d in self.segments if d["obj"].getTd() < 1]
@@ -1226,16 +1275,38 @@ class BorderSim(QWidget):
             return None
 
     def findSurrounding(self, i, j):
+        # return [d for d in self.segments if
+        #         ((d["row"] == i - 1 and d["col"] == j - 1) or (d["row"] == i - 1 and d["col"] == j)
+        #          or (d["row"] == i - 1 and d["col"] == j + 1) or (d["row"] == i and d["col"] == j + 1)
+        #          or (d["row"] == i + 1 and d["col"] == j + 1) or (d["row"] == i + 1 and d["col"] == j)
+        #          or (d["row"] == i + 1 and d["col"] == j - 1) or (d["row"] == i and d["col"] == j - 1))
+        #         and d["obj"].getTd() < 1]
         return [d for d in self.segments if
-                ((d["row"] == i - 1 and d["col"] == j - 1) or (d["row"] == i - 1 and d["col"] == j)
-                 or (d["row"] == i - 1 and d["col"] == j + 1) or (d["row"] == i and d["col"] == j + 1)
-                 or (d["row"] == i + 1 and d["col"] == j + 1) or (d["row"] == i + 1 and d["col"] == j)
-                 or (d["row"] == i + 1 and d["col"] == j - 1) or (d["row"] == i and d["col"] == j - 1))
+                (i - 1 <= d["row"] <= i + 1 and j - 1 <= d["col"] <= j + 1)
                 and d["obj"].getTd() < 1]
 
     def findUpDownSegments(self, i, j):
         return [d for d in self.segments if
                 ((d["row"] == i - 1 and d["col"] == j) or (d["row"] == i + 1 and d["col"] == j))
+                and d["obj"].getTd() < 1]
+
+    def findSegmentsInZone(self, p):
+        return [d for d in self.segments if d["obj"].getZone==p.getId()]
+
+    def findSurroundingInZone(self, p, i, j):
+        # return [d for d in self.segments if
+        #         ((d["row"] == i - 1 and d["col"] == j - 1) or (d["row"] == i - 1 and d["col"] == j)
+        #          or (d["row"] == i - 1 and d["col"] == j + 1) or (d["row"] == i and d["col"] == j + 1)
+        #          or (d["row"] == i + 1 and d["col"] == j + 1) or (d["row"] == i + 1 and d["col"] == j)
+        #          or (d["row"] == i + 1 and d["col"] == j - 1) or (d["row"] == i and d["col"] == j - 1))
+        #         and d["obj"].getTd() < 1 and d["obj"].getZone() == p.getId()]
+        return [d for d in self.segments if
+                (i - 1 <= d["row"] <= i + 1 and j - 1 <= d["col"] <= j + 1)
+                and d["obj"].getTd() < 1 and d["obj"].getZone() == p.getId()]
+
+    def findSegmentsInCoverage(self, i, j, r):
+        return [d for d in self.segments if
+                (i - r <= d["row"] <= i + r and j - r <= d["col"] <= j + r)
                 and d["obj"].getTd() < 1]
 
     def startSim(self):
@@ -1268,7 +1339,9 @@ class BorderSim(QWidget):
             s_init = p.getInitLoc()
             p.setPos(self.pos_x + (int(s_init.getCol() - 1) * self.grid_width),
                      self.pos_y + (int(s_init.getRow()) - 1) * self.grid_width)
-
+            p.resetObservation()
+            p.resetFoundTrespasser()
+            p.setPOMDPStatus(False)
 
         self.trespassers = []
         self.startSim()
@@ -1286,8 +1359,12 @@ class BorderSim(QWidget):
             s_init = p.getInitLoc()
             p.setPos(self.pos_x + (int(s_init.getCol() - 1) * self.grid_width),
                      self.pos_y + (int(s_init.getRow()) - 1) * self.grid_width)
+            p.resetObservation()
+            p.resetFoundTrespasser()
+            p.setPOMDPStatus(False)
 
         self.trespassers = []
+
 
     def simulate(self):
         if self.curT > self.period_len:
@@ -1301,26 +1378,43 @@ class BorderSim(QWidget):
         self.display_cur_stage_val.setPlainText(str(self.curT))
 
         if self.curT == 1:
+            for p in self.patrols:
+                p.resetObservation()
+                p.resetFoundTrespasser()
+                p.setPOMDPStatus(False)
             self.generateTrespassers()
+            self.generatePatrolPlan()
+            # reset footprint value in every segment
+            self.resetFootprintVal()
 
-
+        # increase footprint value in a segment that has been trespassed or patrolled
+        for d in self.segments:
+            if not np.isinf(d["obj"].getTFp()):
+                d["obj"].setTFp(d["obj"].getTFp()+1)
+            if not np.isinf(d["obj"].getPFp()):
+                d["obj"].setPFp(d["obj"].getPFp()+1)
+        # move trespasser
         for k in self.trespassers:
             if k.getArrTime() == self.curT and k.getStatus() == 0:
                 s_cur = k.getInitLoc()
-                s_cur.setFp(0)
+                s_cur.setTFp(0)
+                s_cur.setLastTrespassedBy(k)
                 k.setStatus(1)
                 self.scene.addItem(k)
 
             elif k.getArrTime() < self.curT and k.getStatus() == 1 and k.getCurLoc().getCol() != self.number_col:
                 k_point = k.pos()
                 s_cur = k.getCurLoc()
-                s_cur.setFp(s_cur.getFp() + 1)
+                if s_cur not in k.getTrespassed():
+                    k.addTrespassed(s_cur)
+                # s_cur.setFp(s_cur.getTFp() + 1)
                 if self.trespasser_move_model == 1 or self.trespasser_move_model == 2:
                     s = k.getSegmentFromPlan(self.curT)
                     k.setPos(k_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
                              k_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
                     k.setCurLoc(s)
-                    s.setFp(0)
+                    s.setTFp(0)
+                    s.setLastTrespassedBy(k)
                 else:
                     surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
                     d_random = np.random.choice(surroundings,1)
@@ -1328,23 +1422,153 @@ class BorderSim(QWidget):
                     k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
                              k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
                     k.setCurLoc(s_random)
-                    s_random.setFp(0)
+                    s_random.setTFp(0)
+                    s_random.setLastTrespassedBy(k)
 
             elif k.getCurLoc().getCol() == self.number_col:
-                k.setStatus(2)
+                s_cur = k.getCurLoc()
+                if s_cur not in k.getTrespassed():
+                    k.addTrespassed(s_cur)
+                k.setStatus(3)
                 self.scene.removeItem(k)
 
-        # for l in self.patrols:
-        #     if self.patrol_move_model != 0:
-        #         return
-        #     else:
-        #         return
+        self.trespasser_found = False
+        # move patrol
+        for l in self.patrols:
+            if self.curT == 1:
+                s_cur = l.getInitLoc()
+                s_cur.setPFp(0)
+                s_cur.setLastPatrolledBy(l)
+                l.setStatus(1)
+            elif self.curT > 1 and l.getStatus() == 2:
+                if l.getInvestigatingTime() < self.investigation_time:
+                    l.incrementInvestigatingTime()
+                else:
+                    l.setStatus(1)
+                    l.resetInvestigatingTime()
+                    # update statistic in trespassed segments if detected entity is trespasser
+                    if l.getInvestigatedEntity().isTarget:
+                        self.accu_tres = self.accu_tres + 1
+                        for s_tres in l.getTrespassed():
+                            s_tres.setSt(s_tres.getSt()+1)
+                            s_tres.calScore(self.accu_tres)
+                        # report trespasser found
+                        self.trespasser_found = True
+                        self.number_t_detected = self.number_t_detected + 1
+                        l.addFoundTrespasser(self.curP,self.curT,l.getInvestigatedEntity())
+                        self.scene.removeItem(l.getInvestigatedEntity())
+                        # l.isFoundTrespasser = True
+                    # reset investigated entity to none
+                    l.setInvestigatedEntity(None)
+                    # determine patrol plan after exiting an investigation
+                    if self.patrol_move_model == 1 or self.patrol_move_model == 2:
+                        self.barrierPath(l, self.curT)
+                    elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
+                        self.heuristicPath(l, self.curT)
 
+            else:
+                l_point = l.pos()
+                s_cur = l.getCurLoc()
+                if self.patrol_move_model != 0:
+                    s = l.getSegmentFromPlan(self.curT)
+                    l.setPos(l_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
+                             l_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
+                    l.setCurLoc(s)
+                    s.setPFp(0)
+                    s.setLastPatrolledBy(l)
+                else:
+                    surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+                    d_random = np.random.choice(surroundings, 1)
+                    s_random = d_random[0]["obj"]
+                    l.setPos(l_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+                             l_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+                    l.setCurLoc(s_random)
+                    s_random.setPFp(0)
+                    s_random.setLastPatrolledBy(l)
+
+        # detection
+        for l in self.patrols:
+            p_loc = l.getCurLoc()
+            for k in self.trespassers:
+                k_loc = k.getCurLoc()
+                if p_loc == k_loc:
+                    detection_result = np.random.choice([0,1],
+                                                        p=[1-self.detection_coef*(1-p_loc.getOb()),
+                                                           self.detection_coef*(1-p_loc.getOb())])
+                    if detection_result == 1:
+                        k.setStatus(2)
+                        l.setStatus(2)
+                        l.setInvestigatedEntity(k)
+                        # remove footprint generated by k
+                        for d in self.segments:
+                            if d["obj"].getLastTrespassedBy() == k:
+                                d["obj"].setLastTrespassedBy(None)
+                                d["obj"].setTFp(np.inf)
+
+        # observing footprint and change planned path
+        if self.trespasser_move_model == 2:
+            for k in self.trespassers:
+                if (not np.isinf(k.getCurLoc().getPFp())) and k.getStatus() == 1:
+                    # take the footprint with the prob equal to observing confidence
+                    fp_d = np.random.choice([0,1], p=[1-k.getObservingConfidence(),k.getObservingConfidence()])
+                    if fp_d == 1:
+                        # construct belief
+                        d_b = self.findSegmentsInCoverage(k.getCurLoc().getRow(), k.getCurLoc().getCol(),
+                                                          k.getCurLoc().getPFp())
+                        k.resetBelief()
+                        for dd_b in d_b:
+                            k.addToBelief(dd_b["obj"])
+                        self.findTrespasserPathWithFP(k, k.getCurLoc(), k.getDestination())
+
+        if self.patrol_move_model == 4:
+            # collect footprints
+            for l in self.patrols:
+                if not np.isinf(l.getCurLoc().getTFp()):
+                    l.addObservation(self.curT, l.getId(), (l.getCurLoc().getRow(), l.getCurLoc().getCol(), l.getCurLoc().getTFp()))
+                else:
+                    l.addObservation(self.curT, l.getId(), None)
+                for m in [n for n in self.patrols if n != l]:
+                    comm_result = np.random.choice([0, 1], p=[1 - self.comm_success_rate, self.comm_success_rate])
+                    confd = np.random.choice([0,1], p=[1-m.getObservingConfidence(), m.getObservingConfidence()])
+                    if not np.isinf(m.getCurLoc().getTFp()) and comm_result == 1 and confd == 1:
+                        l.addObservation(self.curT, m.getId(),
+                                         (m.getCurLoc().getRow(), m.getCurLoc().getCol(), m.getCurLoc().getTFp()))
+                    else:
+                        l.addObservation(self.curT, m.getId(), None)
+
+            # utilize observed footprints
+            for l in self.patrols:
+                if l.getStatus() == 1:
+                    # if has never found footprint before, activate POMDP
+                    if not l.getPOMDPStatus() and l.getObservationHistory():
+                        l.setPOMDPStatus(True)
+                        # call POMDP plan for action in the next time stage
+                    # else if POMDP is active
+                    # elif l.getPOMDPStatus() and l.getObservationHistory():
+                        # determine belief from
+                        # call POMDP plan for action in the next time stage
+
+
+
+        if self.trespasser_found and (self.patrol_move_model == 3 or self.patrol_move_model == 4):
+            # update patrol path
+            for l in self.patrols:
+                comm_result = np.random.choice([0,1], p=[1-self.comm_success_rate, self.comm_success_rate])
+                if not l.pomdp_active and comm_result == 1:
+                    self.heuristicPath(l, self.curT)
 
 
         self.curT = self.curT + 1
 
+    def resetFootprintVal(self):
+        for d in self.segments:
+            d["obj"].setTFp(np.inf)
+            d["obj"].setPFp(np.inf)
+            d["obj"].setLastPatrolledBy(None)
+            d["obj"].setLastTrespassedBy(None)
+
     def generateTrespassers(self):
+        self.trespassers = []
         # Poisson number of arrivals in a period
         n = np.random.poisson(self.trespasser_arrival_rate)
         entries = [d for d in self.segments if d["col"] == 1 and d["obj"].getTd() < 1]
@@ -1366,15 +1590,16 @@ class BorderSim(QWidget):
                 self.findTrespasserPath(trespasser, s_en, s_ex)
             self.trespassers.append(trespasser)
 
+
     def generatePatrolPlan(self):
         if self.patrol_move_model == 0:
             return
 
         for p in self.patrols:
             if self.patrol_move_model == 1 or self.patrol_move_model == 2:
-                self.barrierPath(p)
-            # elif self.patrol_move_model == 3:
-
+                self.barrierPath(p, 1)
+            elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
+                self.heuristicPath(p, 1)
 
 
     def findTrespasserPath(self, t, en, ex):
@@ -1454,20 +1679,163 @@ class BorderSim(QWidget):
             t.addToPlan(stage, d["obj"])
             stage = stage + 1
 
-    def barrierPath(self, p):
-        s_c = p.getInitLoc()
-        p.addToPlan(1, s_c)
-        for t in range(2, self.period_len+1):
+    def findTrespasserPathWithFP(self, t, en, ex):
+        # construct graph
+        g = Graph()
+        for x in range(1, self.number_row + 1):
+            for y in range(1, self.number_col + 1):
+                d = self.findSegment(x, y)
+                if d["obj"].getTd() < 1.0:
+                    g.add_vertex('a_(' + str(x) + ',' + str(y) + ')', x, y)
+
+        vertice_keys = g.get_vertices()
+        sum_belief = sum([b.getL() for b in t.getBelief()])
+        for key in vertice_keys:
+            vertex = g.get_vertex(key)
+            # print(vertex)
+            v_i = vertex.get_i()
+            v_j = vertex.get_j()
+            v_1 = self.findSegment(v_i - 1, v_j - 1)
+            v_2 = self.findSegment(v_i - 1, v_j)
+            v_3 = self.findSegment(v_i - 1, v_j + 1)
+            v_4 = self.findSegment(v_i, v_j + 1)
+            v_5 = self.findSegment(v_i + 1, v_j + 1)
+            v_6 = self.findSegment(v_i + 1, v_j)
+            v_7 = self.findSegment(v_i + 1, v_j - 1)
+            v_8 = self.findSegment(v_i, v_j - 1)
+            if (v_i - 1 >= 1 and v_j - 1 >= 1) and v_1["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i - 1) + ',' + str(v_j - 1) + ')')
+                if v_1["obj"] in t.getBelief():
+                    cost = t.getWTd() * v_1["obj"].getTd() + t.getWOb() * (1 - v_1["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_1["obj"].getSt() / self.accu_tres) + v_1["obj"].getL()/sum_belief
+                else:
+                    cost = t.getWTd() * v_1["obj"].getTd() + t.getWOb() * (1 - v_1["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_1["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i - 1 >= 1) and v_2["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i - 1) + ',' + str(v_j) + ')')
+                if v_2["obj"] in t.getBelief():
+                    cost = t.getWTd() * v_2["obj"].getTd() + t.getWOb() * (1 - v_2["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_2["obj"].getSt() / self.accu_tres) + v_2["obj"].getL() / sum_belief
+                else:
+                    cost = t.getWTd() * v_2["obj"].getTd() + t.getWOb() * (1 - v_2["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_2["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i - 1 >= 1 and v_j + 1 <= self.number_col) and v_3["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i - 1) + ',' + str(v_j + 1) + ')')
+                if v_3["obj"] in t.getBelief():
+                    cost = t.getWTd() * v_3["obj"].getTd() + t.getWOb() * (1 - v_3["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_3["obj"].getSt() / self.accu_tres) + v_3["obj"].getL() / sum_belief
+                else:
+                    cost = t.getWTd() * v_3["obj"].getTd() + t.getWOb() * (1 - v_3["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_3["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_j + 1 <= self.number_col) and v_4["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i) + ',' + str(v_j + 1) + ')')
+                if v_4["obj"] in t.getBelief():
+                    cost = t.getWTd() * v_4["obj"].getTd() + t.getWOb() * (1 - v_4["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_4["obj"].getSt() / self.accu_tres) + v_4["obj"].getL() / sum_belief
+                else:
+                    cost = t.getWTd() * v_4["obj"].getTd() + t.getWOb() * (1 - v_4["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_4["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i + 1 <= self.number_row and v_j + 1 <= self.number_col) and v_5["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i + 1) + ',' + str(v_j + 1) + ')')
+                if v_5["obj"] in t.getBelief():
+                    cost = t.getWTd() * v_5["obj"].getTd() + t.getWOb() * (1 - v_5["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_5["obj"].getSt() / self.accu_tres) + v_5["obj"].getL() / sum_belief
+                else:
+                    cost = t.getWTd() * v_5["obj"].getTd() + t.getWOb() * (1 - v_5["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_5["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i + 1 <= self.number_row) and v_6["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i + 1) + ',' + str(v_j) + ')')
+                if v_6["obj"] in t.getBelief():
+                    cost = t.getWTd() * v_6["obj"].getTd() + t.getWOb() * (1 - v_6["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_6["obj"].getSt() / self.accu_tres) + v_6["obj"].getL() / sum_belief
+                else:
+                    cost = t.getWTd() * v_6["obj"].getTd() + t.getWOb() * (1 - v_6["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_6["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i + 1 <= self.number_row and v_j - 1 >= 1) and v_7["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i + 1) + ',' + str(v_j - 1) + ')')
+                if v_7["obj"] in t.getBelief():
+                    cost = t.getWTd() * v_7["obj"].getTd() + t.getWOb() * (1 - v_7["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_7["obj"].getSt() / self.accu_tres) + v_7["obj"].getL() / sum_belief
+                else:
+                    cost = t.getWTd() * v_7["obj"].getTd() + t.getWOb() * (1 - v_7["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_7["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_j - 1 >= 1) and v_8["obj"].getTd() < 1:
+                next_vertex = g.get_vertex('a_(' + str(v_i) + ',' + str(v_j - 1) + ')')
+                if v_8["obj"] in t.getBelief():
+                    cost = t.getWTd() * v_8["obj"].getTd() + t.getWOb() * (1 - v_8["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_8["obj"].getSt() / self.accu_tres) + v_8["obj"].getL() / sum_belief
+                else:
+                    cost = t.getWTd() * v_8["obj"].getTd() + t.getWOb() * (1 - v_8["obj"].getOb()) + \
+                           t.getWSt() * (1 - v_8["obj"].getSt() / self.accu_tres)
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+
+        dijk = Dijkstra(g)
+        entry_vertex = 'a_(' + str(en.getRow()) + ',1)'
+        exit_vertex = 'a_(' + str(ex.getRow()) + ',' + str(self.number_col) + ')'
+        traversed_g = dijk.traversing(entry_vertex, exit_vertex)
+        end_vertex = traversed_g.get_vertex(exit_vertex)
+        path = [end_vertex]
+        dijk.shortest(end_vertex, path)
+        stage = t.getArrTime()
+        for s in path[::-1]:
+            d = self.findSegment(s.get_i(), s.get_j())
+            t.addToPlan(stage, d["obj"])
+            stage = stage + 1
+
+
+    def barrierPath(self, p, t):
+        s_c = p.getCurLoc()
+        p.resetPlan()
+        p.addToPlan(t, s_c)
+        for tt in range(t+1, self.period_len+1):
             d_a = self.findUpDownSegments(s_c.getRow(),s_c.getCol())
             d_s = np.random.choice(d_a,1)
             s_c = d_s[0]["obj"]
-            p.addToPlan(t, s_c)
+            p.addToPlan(tt, s_c)
 
-    def heuristicPath(self, p):
-        s_c = p.getInitLoc()
-        p.addToPlan(1, s_c)
-        # for t in range(2, self.period_len + 1):
+    def heuristicPath(self, p, t):
+        s_c = p.getCurLoc()
+        pa = PatrolPath(p)
+        pa.addPatrolCell(s_c)
+        p.setPl([])
+        p.addPath(pa)
+        # p.addToPlan(1, s_c)
+        for k in range(t+1, self.period_len + 1):
+            pl = p.getPl()
+            pll = []
+            for pa in pl:
+                s_end = pa.getEndPoint()
+                if self.zoning:
+                    d_k = self.findSurroundingInZone(p, s_end.getRow(), s_end.getCol())
+                else:
+                    d_k = self.findSurrounding(s_end.getRow(), s_end.getCol())
+                for dd_k in d_k:
+                    paa = pa
+                    guards = pa.getRepeatGuardSegments(int(np.ceil(self.period_len*self.repeat_guard/100)))
+                    if dd_k["obj"] in guards:
+                        m_k = 0
+                    else:
+                        m_k = p.getWTd() * (1 - dd_k["obj"].getTd()) + p.getWOb() * dd_k["obj"].getOb() + \
+                              p.getWSt() * dd_k["obj"].getSt() / self.accu_tres
+                    paa.addPatrolCell(dd_k["obj"], m_k)
+                    pll.append(paa)
 
+            p.setPl(pll)
+
+        max_pa = max(p.getPl(), key=lambda pa: pa.getAggM())
+        sel_pa = max_pa[0]
+        tt = t
+        p.resetPlan()
+        for cell in sel_pa.getCells():
+            p.addToPlan(tt, cell)
+            tt = tt + 1
 
 
 

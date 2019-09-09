@@ -1,4 +1,5 @@
 from PyQt5.QtWidgets import *
+import numpy as np
 
 
 class GridCell(QGraphicsRectItem):
@@ -14,11 +15,14 @@ class GridCell(QGraphicsRectItem):
         # self.de = 0
         self.L = 0
         self.zone = None
-        self.fp = None
+        self.tfp = np.inf
+        self.pfp = np.inf
         # self.negative_m = 0
         self.isEntry = False
         self.isExit = False
         self.setAcceptHoverEvents(True)
+        self.lastPatrolledBy = None
+        self.lastTrespassedBy = None
 
     def hoverEnterEvent(self, event):
         self.scene().cellEntered.emit(self)
@@ -118,8 +122,26 @@ class GridCell(QGraphicsRectItem):
     def getZone(self):
         return self.zone
 
-    def setFp(self, f):
-        self.fp = f
+    def setTFp(self, f):
+        self.tfp = f
 
-    def getFp(self):
+    def getTFp(self):
         return self.fp
+
+    def setPFp(self, f):
+        self.pfp = f
+
+    def getPFp(self):
+        return self.pfp
+
+    def getLastPatrolledBy(self):
+        return self.lastPatrolledBy
+
+    def getLastTrespassedBy(self):
+        return self.lastTrespassedBy
+
+    def setLastPatrolledBy(self, p):
+        self.lastPatrolledBy = p
+
+    def setLastTrespassedBy(self, t):
+        self.lastTrespassedBy = t
