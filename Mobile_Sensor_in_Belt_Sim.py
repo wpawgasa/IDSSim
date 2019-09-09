@@ -38,8 +38,9 @@ class BorderSim(QWidget):
         self.num_patrol = 0
         self.detection_coef = 1.00
         self.investigation_time = 0
-        self.repeat_guard = 0
+        self.repeat_guard = 5
         self.comm_success_rate = 0.8
+        self.allowed_no_fp_stages = 10
 
         self.entry_prob = []
         self.totalStat = 0
@@ -437,9 +438,16 @@ class BorderSim(QWidget):
         repeatGuard = QSpinBox()
         repeatGuard.setRange(0, 100)
         repeatGuard.setSingleStep(5)
-        repeatGuard.setValue(0)
+        repeatGuard.setValue(5)
         repeatGuard.valueChanged.connect(self.setRepeatGuard)
         patrollerLayout.addRow("Re-patrol guard (% of period length): ", repeatGuard)
+
+        allowNoFP = QSpinBox()
+        allowNoFP.setRange(0, 100)
+        allowNoFP.setSingleStep(5)
+        allowNoFP.setValue(10)
+        allowNoFP.valueChanged.connect(self.setAllowNoFP)
+        patrollerLayout.addRow("Allowed # of stages for no footprint: ", allowNoFP)
 
         patrollerMovementModel = QComboBox()
         patrollerMovementModel.addItem("Random", 0)
@@ -479,6 +487,9 @@ class BorderSim(QWidget):
 
     def setCommSuccessRate(self, v):
         self.comm_success_rate = v
+
+    def setAllowNoFP(self, v):
+        self.allowed_no_fp_stages = v
 
     def setTrespasserMovementModel(self, v):
         self.trespasser_move_model = v
@@ -1539,24 +1550,63 @@ class BorderSim(QWidget):
             # utilize observed footprints
             for l in self.patrols:
                 if l.getStatus() == 1:
+                    l.resetBelief()
                     # if has never found footprint before, activate POMDP
                     if not l.getPOMDPStatus() and l.getObservationHistory():
-                        l.setPOMDPStatus(True)
+                        cur_fp = [(m, l.getObservationAt(self.curT, m)) for m in self.patrols if l.getObservationAt(self.curT, m) is not None]
+                        for fp in cur_fp:
+                            mm = fp[0]
+                            fpp = fp[1]
+                            d_b = self.findSegmentsInCoverage(mm.getCurLoc().getRow(), mm.getCurLoc().getCol(),
+                                                              fpp[2])
+                            for dd_b in d_b:
+                                l.addToBelief(dd_b["obj"])
                         # call POMDP plan for action in the next time stage
+                        if l.getBelief():
+                            l.setPOMDPStatus(True)
+                            self.POMDPPlanning(l)
                     # else if POMDP is active
+                    elif l.getPOMDPStatus():
+                        cur_fp = [(m, l.getObservationAt(self.curT, m)) for m in self.patrols if l.getObservationAt(self.curT, m) is not None]
+                        cur_none_fp = [(m, l.getObservationAt(self.curT, m)) for m in self.patrols if l.getObservationAt(self.curT, m) is None]
+                        for fp in cur_fp:
+                            mm = fp[0]
+                            fpp = fp[1]
+                            d_b = self.findSegmentsInCoverage(mm.getCurLoc().getRow(), mm.getCurLoc().getCol(),
+                                                              fpp[2])
+                            for dd_b in d_b:
+                                l.addToBelief(dd_b["obj"])
+                        for n_fp in cur_none_fp:
+                            mm = n_fp[0]
+                            l_history = l.getObservationHistory()
+                            past_fp_stages = [k[0] for k in l_history.keys() if (l_history[k] is not None) and k[1]==mm]
+                            if past_fp_stages:
+                                last_fp_stage = max(past_fp_stages)
+                                nfp_interval = self.curT - last_fp_stage
+                                if nfp_interval < self.allowed_no_fp_stages:
+                                    fpp = l.getObservationAt(last_fp_stage, mm)
+                                    d_b = self.findSegmentsInCoverage(fpp[0], fpp[1], fpp[2]+nfp_interval)
+                                    for dd_b in d_b:
+                                        l.addToBelief(dd_b["obj"])
+
+                        if l.getBelief():
+                            l.setPOMDPStatus(True)
+                            self.POMDPPlanning(l)
+                        else:
+                            l.setPOMDPStatus(False)
+                            self.heuristicPath(l, self.curT)
+
+
                     # elif l.getPOMDPStatus() and l.getObservationHistory():
                         # determine belief from
                         # call POMDP plan for action in the next time stage
-
-
 
         if self.trespasser_found and (self.patrol_move_model == 3 or self.patrol_move_model == 4):
             # update patrol path
             for l in self.patrols:
                 comm_result = np.random.choice([0,1], p=[1-self.comm_success_rate, self.comm_success_rate])
-                if not l.pomdp_active and comm_result == 1:
+                if not l.getPOMDPStatus() and comm_result == 1:
                     self.heuristicPath(l, self.curT)
-
 
         self.curT = self.curT + 1
 
@@ -1837,7 +1887,8 @@ class BorderSim(QWidget):
             p.addToPlan(tt, cell)
             tt = tt + 1
 
-
+    def POMDPPlanning(self, p):
+        p.resetPlan()
 
 
 if __name__ == "__main__":

@@ -53,6 +53,7 @@ class PatrolAgent(Agent):
         self.observing_confidence = np.random.random_sample()
         self.pomdp_active = False
         self.observation_history = {}
+        self.belief = []
 
     def getWTd(self):
         return self.w_td
@@ -114,8 +115,23 @@ class PatrolAgent(Agent):
     def addObservation(self, stage, observer, fp):
         self.observation_history[(stage, observer)] = fp
 
+    def getObservationHistory(self):
+        return self.observation_history
+
     def resetObservation(self):
         self.observation_history = {}
+
+    def getObservationAt(self, stage, observer):
+        return self.observation_history[(stage, observer)]
+
+    def addToBelief(self, b):
+        self.belief.append(b)
+
+    def getBelief(self):
+        return self.belief
+
+    def resetBelief(self):
+        self.belief = []
 
 
 class TrespasserAgent(Agent):
