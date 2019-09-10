@@ -54,6 +54,8 @@ class PatrolAgent(Agent):
         self.pomdp_active = False
         self.observation_history = {}
         self.belief = []
+        self.T = {}
+        self.explored_b = []
 
     def getWTd(self):
         return self.w_td

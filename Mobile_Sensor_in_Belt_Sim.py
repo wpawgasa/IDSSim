@@ -41,6 +41,7 @@ class BorderSim(QWidget):
         self.repeat_guard = 5
         self.comm_success_rate = 0.8
         self.allowed_no_fp_stages = 10
+        self.mcts_simulations = 100
 
         self.entry_prob = []
         self.totalStat = 0
@@ -449,6 +450,13 @@ class BorderSim(QWidget):
         allowNoFP.valueChanged.connect(self.setAllowNoFP)
         patrollerLayout.addRow("Allowed # of stages for no footprint: ", allowNoFP)
 
+        MCTSSimRounds = QSpinBox()
+        MCTSSimRounds.setRange(10, 1000)
+        MCTSSimRounds.setSingleStep(10)
+        MCTSSimRounds.setValue(100)
+        MCTSSimRounds.valueChanged.connect(self.setMCTSRounds)
+        patrollerLayout.addRow("# of MCTS rounds per planning: ", MCTSSimRounds)
+
         patrollerMovementModel = QComboBox()
         patrollerMovementModel.addItem("Random", 0)
         patrollerMovementModel.addItem("Single Barrier", 1)
@@ -490,6 +498,9 @@ class BorderSim(QWidget):
 
     def setAllowNoFP(self, v):
         self.allowed_no_fp_stages = v
+
+    def setMCTSRounds(self, v):
+        self.mcts_simulations = v
 
     def setTrespasserMovementModel(self, v):
         self.trespasser_move_model = v
@@ -1889,6 +1900,32 @@ class BorderSim(QWidget):
 
     def POMDPPlanning(self, p):
         p.resetPlan()
+        b0 = p.getBelief()
+        sum_b0 = sum([p.getWTd()*(1-g.getTd()) + p.getWOb() * g.getOb() + p.getWSt() * g.getSt() / self.accu_tres
+                      for g in b0])
+        p_b0 = [(p.getWTd()*(1-g.getTd()) + p.getWOb() * g.getOb() + p.getWSt() * g.getSt() / self.accu_tres)/sum_b0
+                      for g in b0]
+        # prune tree
+        p.T = {}
+        # explored belief
+        p.explored_b = []
+        # initialize tree
+        p.explored_b.append(b0)
+        p.T[(b0, 0)] = {"N": 0, "V": 0, "parent": None}
+
+        # simulate for many rounds
+        for i in range(self.mcts_simulations):
+            s0_i = np.random.choice(b0, p=p_b0)
+            self.MCTSSimulate(p, s0_i, b0, 0)
+        # randomly select one location from belief
+
+    def MCTSSimulate(self, p, s_i, b_i, d):
+        gamma = 10**-1
+        epsilon = 10**-12
+        if gamma**d < epsilon:
+            return 0
+        # if not [b for b in p.explored_b]:
+            # for
 
 
 if __name__ == "__main__":
