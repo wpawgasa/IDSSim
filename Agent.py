@@ -52,10 +52,11 @@ class PatrolAgent(Agent):
         self.investigated_entity = None
         self.observing_confidence = np.random.random_sample()
         self.pomdp_active = False
-        self.observation_history = {}
-        self.belief = []
-        self.T = {}
-        self.explored_b = []
+        self.observation_history = {} # record all observations
+        self.active_history = [] # record observation during POMDP
+        self.belief = [] # initial belief of real observation
+        self.T = {} # search tree
+        self.explored_h = [] # explored history
 
     def getWTd(self):
         return self.w_td
