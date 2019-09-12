@@ -126,7 +126,7 @@ class GridCell(QGraphicsRectItem):
         self.tfp = f
 
     def getTFp(self):
-        return self.fp
+        return self.tfp
 
     def setPFp(self, f):
         self.pfp = f

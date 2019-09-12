@@ -1864,7 +1864,7 @@ class BorderSim(QWidget):
     def heuristicPath(self, p, t):
         s_c = p.getCurLoc()
         pa = PatrolPath(p)
-        pa.addPatrolCell(s_c)
+        pa.addPatrolCell(s_c, p.getWTd()*(1-s_c.getTd()) + p.getWOb() * s_c.getOb() + p.getWSt() * s_c.getSt() / self.accu_tres)
         p.setPl([])
         p.addPath(pa)
         # p.addToPlan(1, s_c)
