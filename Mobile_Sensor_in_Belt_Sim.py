@@ -293,11 +293,13 @@ class BorderSim(QWidget):
         viewSelTD = QRadioButton("Difficulty")
         viewSelOB = QRadioButton("Obscurity")
         viewSelST = QRadioButton("Statistic")
+        viewScore = QRadioButton("Score")
         viewSelNone.toggled.connect(self.changeToNoneView)
         viewTress.toggled.connect(self.changeToTresView)
         viewSelTD.toggled.connect(self.changeToTDView)
         viewSelOB.toggled.connect(self.changeToOBView)
         viewSelST.toggled.connect(self.changeToSTView)
+        viewScore.toggled.connect(self.changeToScoreView)
 
         areaViewLayout.addWidget(areaViewLabel)
         areaViewLayout.addWidget(viewSelNone)
@@ -305,6 +307,7 @@ class BorderSim(QWidget):
         areaViewLayout.addWidget(viewSelTD)
         areaViewLayout.addWidget(viewSelOB)
         areaViewLayout.addWidget(viewSelST)
+        areaViewLayout.addWidget(viewScore)
         areaViewLayout.setAlignment(Qt.AlignLeft)
 
         box2Layout.addLayout(areaViewLayout)
@@ -780,6 +783,20 @@ class BorderSim(QWidget):
                 green = 150
                 blue = 85
                 alpha = 255 - int(np.ceil((self.accu_tres - segment.getSt()) * self.accu_tres / 255))
+                segment.setBrush(QColor(red, green, blue, alpha))
+
+    def changeToScoreView(self):
+        # print('td')
+        if not self.segments:
+            return
+        max_L = max([s["obj"].getL() for s in self.segments])
+        for d in self.segments:
+            segment = d["obj"]
+            if segment.getL() > 0:
+                red = 180
+                green = 30
+                blue = 100
+                alpha = 150 * segment.getL()/max_L
                 segment.setBrush(QColor(red, green, blue, alpha))
 
     def calPaths(self):
@@ -1863,8 +1880,10 @@ class BorderSim(QWidget):
 
     def heuristicPath(self, p, t):
         s_c = p.getCurLoc()
+        m_c = p.getWTd() * (1 - s_c.getTd()) + p.getWOb() * s_c.getOb() + \
+                              p.getWSt() * s_c.getSt() / self.accu_tres
         pa = PatrolPath(p)
-        pa.addPatrolCell(s_c)
+        pa.addPatrolCell(s_c, )
         p.setPl([])
         p.addPath(pa)
         # p.addToPlan(1, s_c)

@@ -72,7 +72,7 @@ class Path(QPainterPath):
 class PatrolPath(Path):
 
     def __init__(self, p):
-        super.__init__()
+        super(PatrolPath, self).__init__()
         self.p = p
         self.agg_m = 0
 
@@ -85,7 +85,10 @@ class PatrolPath(Path):
         self.agg_m = self.agg_m - m
 
     def getRepeatGaurdSegments(self, guard):
-        return self.cells[-guard]
+        if guard > len(self.cells):
+            return self.cells
+        else:
+            return self.cells[-guard]
 
     def getAggM(self):
         return self.agg_m
