@@ -58,6 +58,9 @@ class PatrolAgent(Agent):
         self.T = {} # search tree
         self.explored_h = [] # explored history
 
+    def getId(self):
+        return self.id
+
     def getWTd(self):
         return self.w_td
 
