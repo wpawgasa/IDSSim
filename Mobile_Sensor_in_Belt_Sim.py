@@ -8,6 +8,7 @@ from Agent import *
 from Path import *
 from functools import partial
 from dijkstra import Vertex, Graph, Dijkstra
+from joblib import Parallel, delayed, parallel_backend
 
 sip.setapi('QString', 2)
 sip.setapi('QVariant', 2)
@@ -27,11 +28,11 @@ class BorderSim(QWidget):
 
         self.patrols = []
         self.trespassers = []
-        self.others = []
+        self.noises = []
         self.segments = []
 
         self.patrol_move_model = 0
-        self.trespasser_move_model = 0
+        self.trespasser_move_model = [0.5, 0.5, 0.0]
         self.trespasser_arrival_rate = 0
         self.noise_rate = 0
 
@@ -42,6 +43,7 @@ class BorderSim(QWidget):
         self.comm_success_rate = 0.8
         self.allowed_no_fp_stages = 10
         self.mcts_simulations = 100
+        self.planning_stages = 5
 
         self.entry_prob = []
         self.totalStat = 0
@@ -384,27 +386,46 @@ class BorderSim(QWidget):
         trespasserArrRate.setValue(0)
         trespasserArrRate.valueChanged.connect(self.setTrespasserArrivalRate)
         trespasserLayout.addRow("Arrival Rate: ", trespasserArrRate)
-        trespasserGroupBox.setLayout(trespasserLayout)
 
-        trespasserMovementModel = QComboBox()
-        trespasserMovementModel.addItem("Random Movement", 0)
-        trespasserMovementModel.addItem("Static Environment based", 1)
-        trespasserMovementModel.addItem("Dynamic Environment based", 2)
-        trespasserMovementModel.currentIndexChanged.connect(self.setTrespasserMovementModel)
-        trespasserLayout.addRow("Movement Model: ", trespasserMovementModel)
+        trespasserRandomRatio = QSpinBox()
+        trespasserRandomRatio.setRange(0, 100)
+        trespasserRandomRatio.setSingleStep(1)
+        trespasserRandomRatio.setValue(50)
+        trespasserRandomRatio.valueChanged.connect(self.setTrespasserMovementModel1)
+        trespasserLayout.addRow("% of random moving trespasser: ", trespasserRandomRatio)
+        trespasserStaticEnvBasedRatio = QSpinBox()
+        trespasserStaticEnvBasedRatio.setRange(0, 100)
+        trespasserStaticEnvBasedRatio.setSingleStep(1)
+        trespasserStaticEnvBasedRatio.setValue(50)
+        trespasserStaticEnvBasedRatio.valueChanged.connect(self.setTrespasserMovementModel2)
+        trespasserLayout.addRow("% of static environment-based moving trespasser: ", trespasserStaticEnvBasedRatio)
+        trespasserDynamicEnvBasedRatio = QSpinBox()
+        trespasserDynamicEnvBasedRatio.setRange(0, 100)
+        trespasserDynamicEnvBasedRatio.setSingleStep(1)
+        trespasserDynamicEnvBasedRatio.setValue(0)
+        trespasserDynamicEnvBasedRatio.valueChanged.connect(self.setTrespasserMovementModel3)
+        trespasserLayout.addRow("% of dynamic environment-based moving trespasser: ", trespasserDynamicEnvBasedRatio)
 
-        noiseGroupBox = QGroupBox("Noise")
-        noiseLayout = QFormLayout()
+
+        # trespasserMovementModel = QComboBox()
+        # trespasserMovementModel.addItem("Random Movement", 0)
+        # trespasserMovementModel.addItem("Static Environment based", 1)
+        # trespasserMovementModel.addItem("Dynamic Environment based", 2)
+        # trespasserMovementModel.currentIndexChanged.connect(self.setTrespasserMovementModel)
+        # trespasserLayout.addRow("Movement Model: ", trespasserMovementModel)
+
+        # noiseGroupBox = QGroupBox("Noise")
+        # noiseLayout = QFormLayout()
         noiseRate = QSpinBox()
         noiseRate.setRange(0, 100)
         noiseRate.setSingleStep(1)
         noiseRate.setValue(0)
         noiseRate.valueChanged.connect(self.setNoiseRate)
-        noiseLayout.addRow("Noise Rate: ", noiseRate)
-        noiseGroupBox.setLayout(noiseLayout)
-
+        trespasserLayout.addRow("% of Noise-to-trespasser: ", noiseRate)
+        # noiseGroupBox.setLayout(noiseLayout)
+        trespasserGroupBox.setLayout(trespasserLayout)
         layout.addWidget(trespasserGroupBox)
-        layout.addWidget(noiseGroupBox)
+        #layout.addWidget(noiseGroupBox)
 
         patrollerGroupBox = QGroupBox("Patrol Agent")
         patrollerLayout = QFormLayout()
@@ -441,10 +462,10 @@ class BorderSim(QWidget):
 
         repeatGuard = QSpinBox()
         repeatGuard.setRange(0, 100)
-        repeatGuard.setSingleStep(5)
+        repeatGuard.setSingleStep(1)
         repeatGuard.setValue(5)
         repeatGuard.valueChanged.connect(self.setRepeatGuard)
-        patrollerLayout.addRow("Re-patrol guard (% of period length): ", repeatGuard)
+        patrollerLayout.addRow("Re-patrol guard (stages): ", repeatGuard)
 
         allowNoFP = QSpinBox()
         allowNoFP.setRange(0, 100)
@@ -505,9 +526,14 @@ class BorderSim(QWidget):
     def setMCTSRounds(self, v):
         self.mcts_simulations = v
 
-    def setTrespasserMovementModel(self, v):
-        self.trespasser_move_model = v
-        print("Trespasser movement model is set to %i" % v)
+    def setTrespasserMovementModel1(self, v):
+        self.trespasser_move_model[0] = v/100
+
+    def setTrespasserMovementModel2(self, v):
+        self.trespasser_move_model[1] = v/100
+
+    def setTrespasserMovementModel3(self, v):
+        self.trespasser_move_model[2] = v/100
 
     def setPatrolMovementModel(self, v):
         self.patrol_move_model = v
@@ -1370,39 +1396,42 @@ class BorderSim(QWidget):
         self.display_cur_period_val.setPlainText(str(self.curP))
         self.display_cur_stage_val.setPlainText(str(self.curT))
         self.display_sim_status_val.setPlainText("Stopped")
-        for t in self.trespassers:
-            if t.getStatus() == 1:
-                self.scene.removeItem(t)
-
-        for p in self.patrols:
-            s_init = p.getInitLoc()
-            p.setPos(self.pos_x + (int(s_init.getCol() - 1) * self.grid_width),
-                     self.pos_y + (int(s_init.getRow()) - 1) * self.grid_width)
-            p.resetObservation()
-            p.resetFoundTrespasser()
-            p.setPOMDPStatus(False)
-
-        self.trespassers = []
+        # for t in self.trespassers:
+        #     if t.getStatus() == 1:
+        #         self.scene.removeItem(t)
+        #
+        # for p in self.patrols:
+        #     s_init = p.getInitLoc()
+        #     p.setPos(self.pos_x + (int(s_init.getCol() - 1) * self.grid_width),
+        #              self.pos_y + (int(s_init.getRow()) - 1) * self.grid_width)
+        #     p.resetObservation()
+        #     p.resetFoundTrespasser()
+        #     p.setPOMDPStatus(False)
+        #
+        # self.trespassers = []
         self.startSim()
 
     def stopSim(self):
-        self.timer.stop()
+
         self.curP = 0
         self.curT = 0
         self.display_sim_status_val.setPlainText("Stopped")
-        for t in self.trespassers:
-            if t.getStatus() == 1:
-                self.scene.removeItem(t)
+        # for t in self.trespassers:
+        #     if t.getStatus() == 1:
+        #         self.scene.removeItem(t)
 
-        for p in self.patrols:
-            s_init = p.getInitLoc()
-            p.setPos(self.pos_x + (int(s_init.getCol() - 1) * self.grid_width),
-                     self.pos_y + (int(s_init.getRow()) - 1) * self.grid_width)
-            p.resetObservation()
-            p.resetFoundTrespasser()
-            p.setPOMDPStatus(False)
+        # for p in self.patrols:
+        #     s_init = p.getInitLoc()
+        #     p.setPos(self.pos_x + (int(s_init.getCol() - 1) * self.grid_width),
+        #              self.pos_y + (int(s_init.getRow()) - 1) * self.grid_width)
+        #     p.resetObservation()
+        #     p.resetFoundTrespasser()
+        #     p.setPOMDPStatus(False)
 
-        self.trespassers = []
+        # self.trespassers = []
+        self.timer.stop()
+        return
+        # self.timer.stop()
 
 
     def simulate(self):
@@ -1422,6 +1451,7 @@ class BorderSim(QWidget):
                 p.resetFoundTrespasser()
                 p.setPOMDPStatus(False)
             self.generateTrespassers()
+            self.generateNoise()
             self.generatePatrolPlan()
             # reset footprint value in every segment
             self.resetFootprintVal()
@@ -1433,116 +1463,159 @@ class BorderSim(QWidget):
             if not np.isinf(d["obj"].getPFp()):
                 d["obj"].setPFp(d["obj"].getPFp()+1)
         # move trespasser
-        for k in self.trespassers:
-            if k.getArrTime() == self.curT and k.getStatus() == 0:
-                s_cur = k.getInitLoc()
-                s_cur.setTFp(0)
-                s_cur.setLastTrespassedBy(k)
-                k.setStatus(1)
-                self.scene.addItem(k)
+        with parallel_backend('threading', n_jobs=len(self.trespassers)):
+            Parallel()(delayed(self.moveOneTrespasser)(i) for i in self.trespassers)
 
-            elif k.getArrTime() < self.curT and k.getStatus() == 1 and k.getCurLoc().getCol() != self.number_col:
-                k_point = k.pos()
-                s_cur = k.getCurLoc()
-                if s_cur not in k.getTrespassed():
-                    k.addTrespassed(s_cur)
-                # s_cur.setFp(s_cur.getTFp() + 1)
-                if self.trespasser_move_model == 1 or self.trespasser_move_model == 2:
-                    s = k.getSegmentFromPlan(self.curT)
-                    k.setPos(k_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
-                             k_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
-                    k.setCurLoc(s)
-                    s.setTFp(0)
-                    s.setLastTrespassedBy(k)
-                else:
-                    surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
-                    d_random = np.random.choice(surroundings,1)
-                    s_random = d_random[0]["obj"]
-                    k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
-                             k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
-                    k.setCurLoc(s_random)
-                    s_random.setTFp(0)
-                    s_random.setLastTrespassedBy(k)
+        # for k in self.trespassers:
+        #     if k.getArrTime() == self.curT and k.getStatus() == 0:
+        #         s_cur = k.getInitLoc()
+        #         s_cur.setTFp(0)
+        #         s_cur.setLastTrespassedBy(k)
+        #         k.setStatus(1)
+        #         self.scene.addItem(k)
+        #
+        #     elif k.getArrTime() < self.curT and k.getStatus() == 1 and k.getCurLoc().getCol() != self.number_col:
+        #         k_point = k.pos()
+        #         s_cur = k.getCurLoc()
+        #         if s_cur not in k.getTrespassed():
+        #             k.addTrespassed(s_cur)
+        #         # s_cur.setFp(s_cur.getTFp() + 1)
+        #         if k.getMoveModel() != 0:
+        #             s = k.getSegmentFromPlan(self.curT)
+        #             k.setPos(k_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
+        #                      k_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
+        #             k.setCurLoc(s)
+        #             s.setTFp(0)
+        #             s.setLastTrespassedBy(k)
+        #         else:
+        #             surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+        #             d_random = np.random.choice(surroundings,1)
+        #             s_random = d_random[0]["obj"]
+        #             k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+        #                      k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+        #             k.setCurLoc(s_random)
+        #             s_random.setTFp(0)
+        #             s_random.setLastTrespassedBy(k)
+        #
+        #     elif k.getCurLoc().getCol() == self.number_col and k.getStatus() == 1:
+        #         s_cur = k.getCurLoc()
+        #         if s_cur not in k.getTrespassed():
+        #             k.addTrespassed(s_cur)
+        #         k.setStatus(3)
+        #         self.scene.removeItem(k)
 
-            elif k.getCurLoc().getCol() == self.number_col:
-                s_cur = k.getCurLoc()
-                if s_cur not in k.getTrespassed():
-                    k.addTrespassed(s_cur)
-                k.setStatus(3)
-                self.scene.removeItem(k)
+        # noise
+        # move noise
+        with parallel_backend('threading', n_jobs=len(self.noises)):
+            Parallel()(delayed(self.moveOneNoise)(i) for i in self.noises)
+
+        # for noise in self.noises:
+        #     if noise.getArrTime() == self.curT and noise.getStatus() == 0:
+        #         s_cur = noise.getInitLoc()
+        #         noise.setStatus(1)
+        #         self.scene.addItem(noise)
+        #     elif noise.getArrTime() < self.curT and noise.getStatus() == 1 and \
+        #             (noise.getCurLoc().getCol() != self.number_col and noise.getCurLoc().getCol() != 1 and
+        #             noise.getCurLoc().getRow() != self.number_row and noise.getCurLoc().getRow() != 1):
+        #         n_point = noise.pos()
+        #         s_cur = noise.getCurLoc()
+        #         # s_cur.setFp(s_cur.getTFp() + 1)
+        #
+        #         surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+        #         d_random = np.random.choice(surroundings,1)
+        #         s_random = d_random[0]["obj"]
+        #         noise.setPos(n_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+        #                  n_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+        #         noise.setCurLoc(s_random)
+        #     elif noise.getStatus() == 1 and \
+        #             (noise.getCurLoc().getCol() == self.number_col or noise.getCurLoc().getCol() == 1 or
+        #              noise.getCurLoc().getRow() == self.number_row or noise.getCurLoc().getRow() == 1):
+        #         s_cur = noise.getCurLoc()
+        #         noise.setStatus(3)
+        #         self.scene.removeItem(noise)
 
         self.trespasser_found = False
         # move patrol
-        for l in self.patrols:
-            if self.curT == 1:
-                s_cur = l.getInitLoc()
-                s_cur.setPFp(0)
-                s_cur.setLastPatrolledBy(l)
-                l.setStatus(1)
-            elif self.curT > 1 and l.getStatus() == 2:
-                if l.getInvestigatingTime() < self.investigation_time:
-                    l.incrementInvestigatingTime()
-                else:
-                    l.setStatus(1)
-                    l.resetInvestigatingTime()
-                    # update statistic in trespassed segments if detected entity is trespasser
-                    if l.getInvestigatedEntity().isTarget:
-                        self.accu_tres = self.accu_tres + 1
-                        for s_tres in l.getTrespassed():
-                            s_tres.setSt(s_tres.getSt()+1)
-                            s_tres.calScore(self.accu_tres)
-                        # report trespasser found
-                        self.trespasser_found = True
-                        self.number_t_detected = self.number_t_detected + 1
-                        l.addFoundTrespasser(self.curP,self.curT,l.getInvestigatedEntity())
-                        self.scene.removeItem(l.getInvestigatedEntity())
-                        # l.isFoundTrespasser = True
-                    # reset investigated entity to none
-                    l.setInvestigatedEntity(None)
-                    # determine patrol plan after exiting an investigation
-                    if self.patrol_move_model == 1 or self.patrol_move_model == 2:
-                        self.barrierPath(l, self.curT)
-                    elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
-                        self.heuristicPath(l, self.curT)
+        with parallel_backend('threading', n_jobs=self.num_patrol):
+            Parallel()(delayed(self.patrolProcess)(i) for i in self.patrols)
+        # for l in self.patrols:
+        #     if self.curT == 1 and self.curP == 1:
+        #         s_cur = l.getInitLoc()
+        #         s_cur.setPFp(0)
+        #         s_cur.setLastPatrolledBy(l)
+        #         s_cur.setLastPatrolledAt(self.curT)
+        #         l.setPos(0, 0)
+        #         l.setStatus(1)
+        #     elif self.curT > 1 and l.getStatus() == 2:
+        #         if l.getInvestigatingTime() < self.investigation_time:
+        #             l.incrementInvestigatingTime()
+        #         else:
+        #             l.setStatus(1)
+        #             l.resetInvestigatingTime()
+        #             # update statistic in trespassed segments if detected entity is trespasser
+        #             if l.getInvestigatedEntity().isTarget:
+        #                 self.accu_tres = self.accu_tres + 1
+        #                 for s_tres in l.getInvestigatedEntity().getTrespassed():
+        #                     s_tres.setSt(s_tres.getSt()+1)
+        #                     s_tres.calScore(self.accu_tres)
+        #                 # report trespasser found
+        #                 self.trespasser_found = True
+        #                 self.number_t_detected = self.number_t_detected + 1
+        #                 l.addFoundTrespasser(self.curP,self.curT,l.getInvestigatedEntity())
+        #                 self.scene.removeItem(l.getInvestigatedEntity())
+        #                 # l.isFoundTrespasser = True
+        #             # reset investigated entity to none
+        #             l.setInvestigatedEntity(None)
+        #             # determine patrol plan after exiting an investigation
+        #             if self.patrol_move_model == 1 or self.patrol_move_model == 2:
+        #                 self.barrierPath(l, self.curT)
+        #             elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
+        #                 self.heuristicPath(l, self.curT)
+        #
+        #     else:
+        #         l_point = l.pos()
+        #         s_cur = l.getCurLoc()
+        #         if self.patrol_move_model != 0:
+        #             s = l.getSegmentFromPlan(self.curT)
+        #             l.setPos(l_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
+        #                      l_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
+        #             l.setCurLoc(s)
+        #             s.setPFp(0)
+        #             s.setLastPatrolledBy(l)
+        #             s.setLastPatrolledAt(self.curT)
+        #         else:
+        #             surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+        #             d_random = np.random.choice(surroundings, 1)
+        #             s_random = d_random[0]["obj"]
+        #             l.setPos(l_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+        #                      l_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+        #             l.setCurLoc(s_random)
+        #             s_random.setPFp(0)
+        #             s_random.setLastPatrolledBy(l)
+        #             s_random.setLastPatrolledAt(self.curT)
 
-            else:
-                l_point = l.pos()
-                s_cur = l.getCurLoc()
-                if self.patrol_move_model != 0:
-                    s = l.getSegmentFromPlan(self.curT)
-                    l.setPos(l_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
-                             l_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
-                    l.setCurLoc(s)
-                    s.setPFp(0)
-                    s.setLastPatrolledBy(l)
-                else:
-                    surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
-                    d_random = np.random.choice(surroundings, 1)
-                    s_random = d_random[0]["obj"]
-                    l.setPos(l_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
-                             l_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
-                    l.setCurLoc(s_random)
-                    s_random.setPFp(0)
-                    s_random.setLastPatrolledBy(l)
 
         # detection
-        for l in self.patrols:
-            p_loc = l.getCurLoc()
-            for k in self.trespassers:
-                k_loc = k.getCurLoc()
-                if p_loc == k_loc:
-                    detection_result = np.random.choice([0,1],
-                                                        p=[1-self.detection_coef*(1-p_loc.getOb()),
-                                                           self.detection_coef*(1-p_loc.getOb())])
-                    if detection_result == 1:
-                        k.setStatus(2)
-                        l.setStatus(2)
-                        l.setInvestigatedEntity(k)
-                        # remove footprint generated by k
-                        for d in self.segments:
-                            if d["obj"].getLastTrespassedBy() == k:
-                                d["obj"].setLastTrespassedBy(None)
-                                d["obj"].setTFp(np.inf)
+        with parallel_backend('threading', n_jobs=self.num_patrol):
+            Parallel()(delayed(self.detectionProcess)(i) for i in self.patrols)
+
+        # for l in self.patrols:
+        #     p_loc = l.getCurLoc()
+        #     for k in self.trespassers:
+        #         k_loc = k.getCurLoc()
+        #         if p_loc == k_loc:
+        #             detection_result = np.random.choice([0,1],
+        #                                                 p=[1-self.detection_coef*(1-p_loc.getOb()),
+        #                                                    self.detection_coef*(1-p_loc.getOb())])
+        #             if detection_result == 1:
+        #                 k.setStatus(2)
+        #                 l.setStatus(2)
+        #                 l.setInvestigatedEntity(k)
+        #                 # remove footprint generated by k
+        #                 for d in self.segments:
+        #                     if d["obj"].getLastTrespassedBy() == k:
+        #                         d["obj"].setLastTrespassedBy(None)
+        #                         d["obj"].setTFp(np.inf)
 
         # observing footprint and change planned path
         if self.trespasser_move_model == 2:
@@ -1593,6 +1666,8 @@ class BorderSim(QWidget):
                         if l.getBelief():
                             l.setPOMDPStatus(True)
                             self.POMDPPlanning(l)
+                        elif l.getReplanStage() == self.curT:
+                            self.heuristicPath(l, self.curT)
                     # else if POMDP is active
                     elif l.getPOMDPStatus():
                         cur_fp = [(m, l.getObservationAt(self.curT, m)) for m in self.patrols if l.getObservationAt(self.curT, m) is not None]
@@ -1624,10 +1699,10 @@ class BorderSim(QWidget):
                             l.setPOMDPStatus(False)
                             self.heuristicPath(l, self.curT)
 
-
-                    # elif l.getPOMDPStatus() and l.getObservationHistory():
-                        # determine belief from
-                        # call POMDP plan for action in the next time stage
+        elif self.patrol_move_model == 3:
+            for l in self.patrols:
+                if l.getReplanStage() == self.curT:
+                    self.heuristicPath(l, self.curT)
 
         if self.trespasser_found and (self.patrol_move_model == 3 or self.patrol_move_model == 4):
             # update patrol path
@@ -1638,6 +1713,143 @@ class BorderSim(QWidget):
 
         self.curT = self.curT + 1
 
+    def moveOneTrespasser(self, k):
+        if k.getArrTime() == self.curT and k.getStatus() == 0:
+            s_cur = k.getInitLoc()
+            s_cur.setTFp(0)
+            s_cur.setLastTrespassedBy(k)
+            k.setStatus(1)
+            self.scene.addItem(k)
+
+        elif k.getArrTime() < self.curT and k.getStatus() == 1 and k.getCurLoc().getCol() != self.number_col:
+            k_point = k.pos()
+            s_cur = k.getCurLoc()
+            if s_cur not in k.getTrespassed():
+                k.addTrespassed(s_cur)
+            # s_cur.setFp(s_cur.getTFp() + 1)
+            if k.getMoveModel() != 0:
+                s = k.getSegmentFromPlan(self.curT)
+                k.setPos(k_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
+                         k_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
+                k.setCurLoc(s)
+                s.setTFp(0)
+                s.setLastTrespassedBy(k)
+            else:
+                surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+                d_random = np.random.choice(surroundings, 1)
+                s_random = d_random[0]["obj"]
+                k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+                         k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+                k.setCurLoc(s_random)
+                s_random.setTFp(0)
+                s_random.setLastTrespassedBy(k)
+
+        elif k.getCurLoc().getCol() == self.number_col and k.getStatus() == 1:
+            s_cur = k.getCurLoc()
+            if s_cur not in k.getTrespassed():
+                k.addTrespassed(s_cur)
+            k.setStatus(3)
+            self.scene.removeItem(k)
+
+    def moveOneNoise(self, noise):
+        if noise.getArrTime() == self.curT and noise.getStatus() == 0:
+            s_cur = noise.getInitLoc()
+            noise.setStatus(1)
+            self.scene.addItem(noise)
+        elif noise.getArrTime() < self.curT and noise.getStatus() == 1 and \
+                (noise.getCurLoc().getCol() != self.number_col and noise.getCurLoc().getCol() != 1 and
+                 noise.getCurLoc().getRow() != self.number_row and noise.getCurLoc().getRow() != 1):
+            n_point = noise.pos()
+            s_cur = noise.getCurLoc()
+            # s_cur.setFp(s_cur.getTFp() + 1)
+
+            surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+            d_random = np.random.choice(surroundings, 1)
+            s_random = d_random[0]["obj"]
+            noise.setPos(n_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+                         n_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+            noise.setCurLoc(s_random)
+        elif noise.getStatus() == 1 and \
+                (noise.getCurLoc().getCol() == self.number_col or noise.getCurLoc().getCol() == 1 or
+                 noise.getCurLoc().getRow() == self.number_row or noise.getCurLoc().getRow() == 1):
+            s_cur = noise.getCurLoc()
+            noise.setStatus(3)
+            self.scene.removeItem(noise)
+
+    def patrolProcess(self, l):
+        if self.curT == 1 and self.curP == 1:
+            s_cur = l.getInitLoc()
+            s_cur.setPFp(0)
+            s_cur.setLastPatrolledBy(l)
+            s_cur.setLastPatrolledAt(self.curT)
+            l.setPos(0, 0)
+            l.setStatus(1)
+        elif self.curT > 1 and l.getStatus() == 2:
+            if l.getInvestigatingTime() < self.investigation_time:
+                l.incrementInvestigatingTime()
+            else:
+                l.setStatus(1)
+                l.resetInvestigatingTime()
+                # update statistic in trespassed segments if detected entity is trespasser
+                if l.getInvestigatedEntity().isTarget:
+                    self.accu_tres = self.accu_tres + 1
+                    for s_tres in l.getInvestigatedEntity().getTrespassed():
+                        s_tres.setSt(s_tres.getSt() + 1)
+                        s_tres.calScore(self.accu_tres)
+                    # report trespasser found
+                    self.trespasser_found = True
+                    self.number_t_detected = self.number_t_detected + 1
+                    l.addFoundTrespasser(self.curP, self.curT, l.getInvestigatedEntity())
+                    self.scene.removeItem(l.getInvestigatedEntity())
+                    # l.isFoundTrespasser = True
+                # reset investigated entity to none
+                l.setInvestigatedEntity(None)
+                # determine patrol plan after exiting an investigation
+                if self.patrol_move_model == 1 or self.patrol_move_model == 2:
+                    self.barrierPath(l, self.curT)
+                elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
+                    self.heuristicPath(l, self.curT)
+
+        else:
+            l_point = l.pos()
+            s_cur = l.getCurLoc()
+            if self.patrol_move_model != 0:
+                s = l.getSegmentFromPlan(self.curT)
+                l.setPos(l_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
+                         l_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
+                l.setCurLoc(s)
+                s.setPFp(0)
+                s.setLastPatrolledBy(l)
+                s.setLastPatrolledAt(self.curT)
+            else:
+                surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+                d_random = np.random.choice(surroundings, 1)
+                s_random = d_random[0]["obj"]
+                l.setPos(l_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+                         l_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+                l.setCurLoc(s_random)
+                s_random.setPFp(0)
+                s_random.setLastPatrolledBy(l)
+                s_random.setLastPatrolledAt(self.curT)
+
+    def detectionProcess(self, l):
+        p_loc = l.getCurLoc()
+        for k in self.trespassers:
+            k_loc = k.getCurLoc()
+            if p_loc == k_loc:
+                detection_result = np.random.choice([0, 1],
+                                                    p=[1 - self.detection_coef * (1 - p_loc.getOb()),
+                                                       self.detection_coef * (1 - p_loc.getOb())])
+                if detection_result == 1:
+                    k.setStatus(2)
+                    l.setStatus(2)
+                    l.setInvestigatedEntity(k)
+                    # remove footprint generated by k
+                    for d in self.segments:
+                        if d["obj"].getLastTrespassedBy() == k:
+                            d["obj"].setLastTrespassedBy(None)
+                            d["obj"].setTFp(np.inf)
+
     def resetFootprintVal(self):
         for d in self.segments:
             d["obj"].setTFp(np.inf)
@@ -1646,38 +1858,108 @@ class BorderSim(QWidget):
             d["obj"].setLastTrespassedBy(None)
 
     def generateTrespassers(self):
+        for t in self.trespassers:
+            if t.getStatus() == 1:
+                self.scene.removeItem(t)
         self.trespassers = []
         # Poisson number of arrivals in a period
         n = np.random.poisson(self.trespasser_arrival_rate)
         entries = [d for d in self.segments if d["col"] == 1 and d["obj"].getTd() < 1]
         exits = [d for d in self.segments if d["col"] == self.number_col and d["obj"].getTd() < 1]
-        for i in range(n):
-            # trespasser's poisson arrival time
-            arr_time = np.floor(np.random.uniform(1, self.period_len))
-            # random select entry segment
-            entry_s = np.random.choice(entries, 1)
-            exit_s = np.random.choice(exits, 1)
-            s_en = entry_s[0]["obj"]
-            s_ex = exit_s[0]["obj"]
-            # add new trespasser
-            trespasser = TrespasserAgent('tres_' + str(i + 1), s_en, s_ex, arr_time,
-                                         self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
-                                         self.pos_y + (int(s_en.getRow()) - 1) * self.grid_width,
-                                         self.grid_width, self.grid_width)
-            if self.trespasser_move_model == 1 or self.trespasser_move_model == 2:
-                self.findTrespasserPath(trespasser, s_en, s_ex)
-            self.trespassers.append(trespasser)
+        # model_p = [r/100 for r in self.trespasser_move_model]
+        with parallel_backend('threading', n_jobs=n):
+            results = Parallel()(delayed(self.genOneTrespasser)(i, entries, exits) for i in range(n))
+            self.trespassers = results
+        # for i in range(n):
+        #     # trespasser's poisson arrival time
+        #     arr_time = np.floor(np.random.uniform(1, self.period_len))
+        #     # random select entry segment
+        #     entry_s = np.random.choice(entries, 1)
+        #     exit_s = np.random.choice(exits, 1)
+        #     s_en = entry_s[0]["obj"]
+        #     s_ex = exit_s[0]["obj"]
+        #     # add new trespasser
+        #     trespasser = TrespasserAgent('tres_' + str(i + 1), s_en, s_ex, arr_time,
+        #                                  self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
+        #                                  self.pos_y + (int(s_en.getRow()) - 1) * self.grid_width,
+        #                                  self.grid_width, self.grid_width)
+        #     mm = np.random.choice([0, 1, 2], p=self.trespasser_move_model)
+        #     trespasser.setMoveModel(mm)
+        #     if mm != 0:
+        #         self.findTrespasserPath(trespasser, s_en, s_ex)
+        #     self.trespassers.append(trespasser)
 
+    def genOneTrespasser(self, i, entries, exits):
+        # trespasser's poisson arrival time
+        arr_time = np.floor(np.random.uniform(1, self.period_len))
+        # random select entry segment
+        entry_s = np.random.choice(entries, 1)
+        exit_s = np.random.choice(exits, 1)
+        s_en = entry_s[0]["obj"]
+        s_ex = exit_s[0]["obj"]
+        # add new trespasser
+        trespasser = TrespasserAgent('tres_' + str(i + 1), s_en, s_ex, arr_time,
+                                     self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
+                                     self.pos_y + (int(s_en.getRow()) - 1) * self.grid_width,
+                                     self.grid_width, self.grid_width)
+        mm = np.random.choice([0, 1, 2], p=self.trespasser_move_model)
+        trespasser.setMoveModel(mm)
+        if mm != 0:
+            self.findTrespasserPath(trespasser, s_en, s_ex)
+        return trespasser
+
+
+
+    def generateNoise(self):
+        for n in self.noises:
+            if n.getStatus() == 1:
+                self.scene.removeItem(n)
+        self.noises = []
+        # Poisson number of arrivals in a period
+        n = np.random.poisson(self.trespasser_arrival_rate*self.noise_rate/100)
+        entries = [d for d in self.segments if d["col"] == 1 and d["obj"].getTd() < 1]
+        # exits = [d for d in self.segments if d["col"] == self.number_col and d["obj"].getTd() < 1]
+        with parallel_backend('threading', n_jobs=n):
+            results = Parallel()(delayed(self.genOneNoise)(i, entries) for i in range(n))
+            self.noises = results
+        # for i in range(n):
+        #     # trespasser's poisson arrival time
+        #     arr_time = np.floor(np.random.uniform(1, self.period_len))
+        #     # random select entry segment
+        #     entry_s = np.random.choice(entries, 1)
+        #     s_en = entry_s[0]["obj"]
+        #     # add new trespasser
+        #     noise = Noise('noise_' + str(i + 1), s_en, arr_time,
+        #                                  self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
+        #                                  self.pos_y + (int(s_en.getRow()) - 1) * self.grid_width,
+        #                                  self.grid_width, self.grid_width)
+        #     self.noises.append(noise)
+
+    def genOneNoise(self, i, entries):
+        # trespasser's poisson arrival time
+        arr_time = np.floor(np.random.uniform(1, self.period_len))
+        # random select entry segment
+        entry_s = np.random.choice(entries, 1)
+        s_en = entry_s[0]["obj"]
+        # add new trespasser
+        noise = Noise('noise_' + str(i + 1), s_en, arr_time,
+                      self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
+                      self.pos_y + (int(s_en.getRow()) - 1) * self.grid_width,
+                      self.grid_width, self.grid_width)
+        return noise
 
     def generatePatrolPlan(self):
         if self.patrol_move_model == 0:
             return
+        with parallel_backend('threading', n_jobs=self.num_patrol):
+            Parallel()(delayed(self.genOnePatrolInitPlan)(p) for p in self.patrols)
 
-        for p in self.patrols:
-            if self.patrol_move_model == 1 or self.patrol_move_model == 2:
-                self.barrierPath(p, 1)
-            elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
-                self.heuristicPath(p, 1)
+
+    def genOnePatrolInitPlan(self, p):
+        if self.patrol_move_model == 1 or self.patrol_move_model == 2:
+            self.barrierPath(p, 1)
+        elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
+            self.heuristicPath(p, 1)
 
 
     def findTrespasserPath(self, t, en, ex):
@@ -1872,34 +2154,43 @@ class BorderSim(QWidget):
         s_c = p.getCurLoc()
         p.resetPlan()
         p.addToPlan(t, s_c)
-        for tt in range(t+1, self.period_len+1):
+        for tt in range(t+1, t + self.planning_stages):
             d_a = self.findUpDownSegments(s_c.getRow(),s_c.getCol())
             d_s = np.random.choice(d_a,1)
             s_c = d_s[0]["obj"]
             p.addToPlan(tt, s_c)
+        p.setReplanStage(t + self.planning_stages - 1)
+
 
     def heuristicPath(self, p, t):
         s_c = p.getCurLoc()
         m_c = p.getWTd() * (1 - s_c.getTd()) + p.getWOb() * s_c.getOb() + \
                               p.getWSt() * s_c.getSt() / self.accu_tres
-        pa = PatrolPath(p)
-        pa.addPatrolCell(s_c, )
+        pa = PatrolPath()
+        pa.addPatrolCell(s_c, m_c)
         p.setPl([])
         p.addPath(pa)
         # p.addToPlan(1, s_c)
-        for k in range(t+1, self.period_len + 1):
+        for k in range(t+1, t + self.planning_stages):
             pl = p.getPl()
             pll = []
-            for pa in pl:
-                s_end = pa.getEndPoint()
+            for pa_ in pl:
+                s_end = pa_.getEndPoint()
                 if self.zoning:
                     d_k = self.findSurroundingInZone(p, s_end.getRow(), s_end.getCol())
                 else:
                     d_k = self.findSurrounding(s_end.getRow(), s_end.getCol())
+
                 for dd_k in d_k:
-                    paa = pa
-                    guards = pa.getRepeatGuardSegments(int(np.ceil(self.period_len*self.repeat_guard/100)))
-                    if dd_k["obj"] in guards:
+                    paa = PatrolPath()
+                    for cell in pa_.getCells():
+                        paa.addPatrolCell(cell, 0)
+                    paa.setAggM(pa_.getAggM())
+                    paa.setLength(pa_.getLength())
+                    guards = paa.getRepeatGuardSegments(self.repeat_guard)
+
+                    if (dd_k["obj"] in guards) or (dd_k["obj"].getLastPatrolledBy() and
+                                                   dd_k["obj"].getLastPatrolledAt() + self.repeat_guard > self.curT):
                         m_k = 0
                     else:
                         m_k = p.getWTd() * (1 - dd_k["obj"].getTd()) + p.getWOb() * dd_k["obj"].getOb() + \
@@ -1910,12 +2201,14 @@ class BorderSim(QWidget):
             p.setPl(pll)
 
         max_pa = max(p.getPl(), key=lambda pa: pa.getAggM())
-        sel_pa = max_pa[0]
+        # sel_pa = max_pa[0]
         tt = t
         p.resetPlan()
-        for cell in sel_pa.getCells():
+        for cell in max_pa.getCells():
             p.addToPlan(tt, cell)
             tt = tt + 1
+        p.setReplanStage(t + self.planning_stages - 1)
+
 
     def POMDPPlanning(self, p):
         p.resetPlan()

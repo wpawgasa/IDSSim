@@ -22,6 +22,7 @@ class GridCell(QGraphicsRectItem):
         self.isExit = False
         self.setAcceptHoverEvents(True)
         self.lastPatrolledBy = None
+        self.lastPatrolledAt = np.inf
         self.lastTrespassedBy = None
 
     def hoverEnterEvent(self, event):
@@ -145,3 +146,9 @@ class GridCell(QGraphicsRectItem):
 
     def setLastTrespassedBy(self, t):
         self.lastTrespassedBy = t
+
+    def setLastPatrolledAt(self, t):
+        self.lastPatrolledAt = t
+
+    def getLastPatrolledAt(self):
+        return self.lastPatrolledAt

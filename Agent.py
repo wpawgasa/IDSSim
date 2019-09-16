@@ -57,6 +57,7 @@ class PatrolAgent(Agent):
         self.belief = [] # initial belief of real observation
         self.T = {} # search tree
         self.explored_h = [] # explored history
+        self.replan_stage = 0
 
     def getId(self):
         return self.id
@@ -139,11 +140,18 @@ class PatrolAgent(Agent):
     def resetBelief(self):
         self.belief = []
 
+    def setReplanStage(self, t):
+        self.replan_stage = t
+
+    def getReplanStage(self):
+        return self.replan_stage
+
 
 class TrespasserAgent(Agent):
     def __init__(self, id, loc_en, loc_ex, arr_time, x, y, w, h, parent=None):
         super(TrespasserAgent, self).__init__(loc_en, x, y, w, h, parent)
         self.id = id
+        self.move_model = 0
         self.isTarget = True
         self.setPen(QColor(237, 76, 62, 255))
         self.setBrush(QColor(237, 76, 62, 255))
@@ -198,14 +206,33 @@ class TrespasserAgent(Agent):
     def getDestination(self):
         return self.exit_s
 
+    def setMoveModel(self, m):
+        self.move_model = m
+
+    def getMoveModel(self):
+        return self.move_model
+
 class Noise(Agent):
-    def __init__(self, id, loc, x, y, w, h, parent=None):
-        super(Noise, self).__init__(loc, x, y, w, h, parent)
+    def __init__(self, id, loc_en, arr_time, x, y, w, h, parent=None):
+        super(Noise, self).__init__(loc_en, x, y, w, h, parent)
         self.id = id
         self.setPen(QColor(240, 130, 41, 255))
         self.setBrush(QColor(240, 130, 41, 255))
+        self.setToolTip(self.id)
         self.arr_time = 0
         self.isTarget = False
+        self.status = 0  # 0 not arrive yet, 1 in region, 2 detected, 3 exit region
+
+        def getArrTime(self):
+            return self.arr_time
+
+        def setStatus(self, status):
+            self.status = status
+
+        def getStatus(self):
+            return self.status
+
+
     
 
     

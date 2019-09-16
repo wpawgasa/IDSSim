@@ -55,6 +55,9 @@ class Path(QPainterPath):
     def getLength(self):
         return self.length
 
+    def setLength(self, l):
+        self.length = l
+
     def getCells(self):
         return self.cells
 
@@ -71,9 +74,9 @@ class Path(QPainterPath):
 
 class PatrolPath(Path):
 
-    def __init__(self, p):
+    def __init__(self):
         super(PatrolPath, self).__init__()
-        self.p = p
+        # self.p = p
         self.agg_m = 0
 
     def addPatrolCell(self, cell, m):
@@ -84,13 +87,16 @@ class PatrolPath(Path):
         self.removeCell(cell)
         self.agg_m = self.agg_m - m
 
-    def getRepeatGaurdSegments(self, guard):
+    def getRepeatGuardSegments(self, guard):
         if guard > len(self.cells):
             return self.cells
         else:
-            return self.cells[-guard]
+            return self.cells[-guard:]
 
     def getAggM(self):
         return self.agg_m
+
+    def setAggM(self, v):
+        self.agg_m = v
 
 
