@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+import copy
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
@@ -57,6 +58,8 @@ class PatrolAgent(Agent):
         self.belief = [] # initial belief of real observation
         self.T = {} # search tree
         self.explored_h = [] # explored history
+        self.recorded_segs = [] # individual recorded segments info
+        self.recorded_stat = 0
         self.replan_stage = 0
 
     def getId(self):
@@ -145,6 +148,30 @@ class PatrolAgent(Agent):
 
     def getReplanStage(self):
         return self.replan_stage
+
+    def copySegmentsInfo(self, segments):
+        self.recorded_segs = []
+        for d in segments:
+            s = copy.copy(d["obj"])
+            self.recorded_segs.append(s)
+
+    def setRecordedStat(self, v):
+        self.recorded_stat = v
+
+    def getRecordedStat(self):
+        return self.recorded_stat
+
+    def findRecordedSegment(self, i, j):
+        value = [s for s in self.recorded_segs if s.getRow() == i and s.getCol() == j]
+        # value = filter(lambda s: s[0] == key, self.segments["segments"])
+        # print(len(value))
+        if len(value) > 0:
+            return value[0]
+        else:
+            return None
+
+
+
 
 
 class TrespasserAgent(Agent):
