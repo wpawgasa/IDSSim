@@ -1728,6 +1728,9 @@ class BorderSim(QWidget):
                 self.barrierPath(l, self.curT)
             elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
                 self.heuristicPath(l, self.curT)
+            else:
+                self.randomPath(l, self.curT)
+
 
     def resetFootprintVal(self):
         for d in self.segments:
@@ -1841,6 +1844,8 @@ class BorderSim(QWidget):
             self.barrierPath(p, 1)
         elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
             self.heuristicPath(p, 1)
+        else:
+            self.randomPath(p, 1)
 
 
     def findTrespasserPath(self, t, en, ex):
@@ -2030,6 +2035,21 @@ class BorderSim(QWidget):
             t.addToPlan(stage, d["obj"])
             stage = stage + 1
 
+
+    def randomPath(self, p, t):
+        s_c = p.getCurLoc()
+        p.resetPlan()
+        p.addToPlan(t, s_c)
+        for tt in range(t + 1, t + self.planning_stages):
+            if self.zoning:
+                d_k = self.findSurroundingInZone(p, s_c.getRow(), s_c.getCol())
+            else:
+                d_k = self.findSurrounding(s_c.getRow(), s_c.getCol())
+
+            d_c = np.random.choice(d_k, 1)
+            s_c = d_c["obj"]
+            p.addToPlan(tt, s_c)
+        p.setReplanStage(t + self.planning_stages - 1)
 
     def barrierPath(self, p, t):
         s_c = p.getCurLoc()
