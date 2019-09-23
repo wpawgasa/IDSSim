@@ -4,13 +4,15 @@ import copy
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+from GridCell import *
 
 class Agent(QGraphicsEllipseItem):
     def __init__(self, loc, x, y, w, h, parent=None):
         super(Agent, self).__init__(x, y, w, h, parent)
         self.initLoc = loc
         self.curLoc = loc
-        self.plan = {}
+        # self.plan = {}
+        self.plan = []
 
     def setCurLoc(self, loc):
         self.curLoc = loc
@@ -25,14 +27,19 @@ class Agent(QGraphicsEllipseItem):
         return self.initLoc
 
     def addToPlan(self, key, segment):
-        self.plan[key] = segment
+        # self.plan[key] = segment
+        self.plan.append(segment)
 
     def getSegmentFromPlan(self, key):
-        return self.plan[key]
+        #return self.plan[key]
+        return self.plan.pop(0)
 
     def resetPlan(self):
-        self.plan = {}
+        # self.plan = {}
+        self.plan = []
 
+    def delayPlan(self, segment):
+        self.plan.insert(0, segment)
 
 
 class PatrolAgent(Agent):
@@ -152,7 +159,14 @@ class PatrolAgent(Agent):
     def copySegmentsInfo(self, segments):
         self.recorded_segs = []
         for d in segments:
-            s = copy.copy(d["obj"])
+            # s = copy.copy(d["obj"])
+            s = GridCell(0, 0, 0, 0)
+            s.setTd(d["obj"].getTd())
+            s.setOb(d["obj"].getOb())
+            s.setSt(d["obj"].getSt())
+            s.setL(d["obj"].getL())
+            s.setRow(d["obj"].getRow())
+            s.setCol(d["obj"].getCol())
             self.recorded_segs.append(s)
 
     def setRecordedStat(self, v):
@@ -169,8 +183,6 @@ class PatrolAgent(Agent):
             return value[0]
         else:
             return None
-
-
 
 
 
@@ -250,14 +262,14 @@ class Noise(Agent):
         self.isTarget = False
         self.status = 0  # 0 not arrive yet, 1 in region, 2 detected, 3 exit region
 
-        def getArrTime(self):
-            return self.arr_time
+    def getArrTime(self):
+        return self.arr_time
 
-        def setStatus(self, status):
-            self.status = status
+    def setStatus(self, status):
+        self.status = status
 
-        def getStatus(self):
-            return self.status
+    def getStatus(self):
+        return self.status
 
 
     

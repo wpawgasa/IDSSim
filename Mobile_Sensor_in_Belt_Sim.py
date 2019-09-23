@@ -9,6 +9,7 @@ from Path import *
 from functools import partial
 from dijkstra import Vertex, Graph, Dijkstra
 from joblib import Parallel, delayed, parallel_backend
+import pandas as pd
 
 sip.setapi('QString', 2)
 sip.setapi('QVariant', 2)
@@ -43,7 +44,7 @@ class BorderSim(QWidget):
         self.comm_success_rate = 0.8
         self.allowed_no_fp_stages = 10
         self.mcts_simulations = 100
-        self.planning_stages = 5
+        self.planning_stages = 10
 
         self.entry_prob = []
         self.totalStat = 0
@@ -57,6 +58,9 @@ class BorderSim(QWidget):
         self.number_n_detected = 0  # number of intruder detected by a sensors (false detection)
         self.trespasser_found = False
         self.accu_tres = 0
+        self.avg_detection_rate = 0
+        self.detection_rate_per_round = []
+        self.result1_df = pd.DataFrame(columns=['entering','leaving','detected','detection_rate'])
 
         self.zoning = False
 
@@ -71,7 +75,7 @@ class BorderSim(QWidget):
         self.stage_duration = 0.1
 
         self.timer = QTimer()
-        self.curP = 0
+        self.curP = 1
         self.curT = 0
         self.timer.timeout.connect(self.simulate)
 
@@ -239,11 +243,13 @@ class BorderSim(QWidget):
         tabView = QTabWidget()
         envSettingTab = QWidget()
         agentSettingTab = QWidget()
+        footprintSettingTab = QWidget()
         simCtrlTab = QWidget()
         resultTab = QWidget()
 
         tabView.addTab(envSettingTab, "Environment")
         tabView.addTab(agentSettingTab, "Agents")
+        tabView.addTab(footprintSettingTab, "Footprint")
         tabView.addTab(simCtrlTab, "Simulation")
         tabView.addTab(resultTab, "Result")
         envLayOut = self.createEnvSettingLayOut()
@@ -252,6 +258,11 @@ class BorderSim(QWidget):
         agentSettingTab.setLayout(agentLayOut)
         simLayOut = self.createSimCtrlLayOut()
         simCtrlTab.setLayout(simLayOut)
+        resultLayOut = self.createResultLayOut()
+        resultTab.setLayout(resultLayOut)
+        fpLayOut = self.createFootprintSettingLayOut()
+        footprintSettingTab.setLayout(fpLayOut)
+
         return tabView
 
     def createEnvSettingLayOut(self):
@@ -449,7 +460,7 @@ class BorderSim(QWidget):
         investigationTime.setRange(0, 100)
         investigationTime.setSingleStep(1)
         investigationTime.setValue(0)
-        investigationTime.valueChanged.connect(self.setPatrolNumber)
+        investigationTime.valueChanged.connect(self.setInvestigationTime)
         patrollerLayout.addRow("Investigation time: ", investigationTime)
 
         commSuccessRate = QDoubleSpinBox()
@@ -509,6 +520,57 @@ class BorderSim(QWidget):
         layout.addWidget(patrollerGroupBox)
         return layout
 
+    def createFootprintSettingLayOut(self):
+        layout = QVBoxLayout()
+
+        fpSensorGroupBox = QGroupBox("Footprint Sensor")
+        fpSensorLayOut = QFormLayout()
+
+        fpSensorGroupBox.setLayout(fpSensorLayOut)
+
+        layout.addWidget(fpSensorGroupBox)
+
+        return layout
+
+    def createResultLayOut(self):
+        layout = QVBoxLayout()
+
+        result1GroupBox = QGroupBox("Trespasser Detection Rate")
+        result1LayOut = QFormLayout()
+
+        self.result1Tbl = QTableWidget(0,5)
+        result1_header_labels = ['Round', 'Entering Trespasser', 'Leaving Trespasser', 'Detected Trespasser', 'Detection Rate']
+        self.result1Tbl.setHorizontalHeaderLabels(result1_header_labels)
+        self.result1Tbl.setFixedSize(650,300)
+        self.result1Tbl.setColumnWidth(0, 50)
+        self.result1Tbl.setColumnWidth(1, 150)
+        self.result1Tbl.setColumnWidth(2, 150)
+        self.result1Tbl.setColumnWidth(3, 150)
+        self.result1Tbl.setColumnWidth(4, 150)
+        self.result1Tbl.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.result1Tbl.setSelectionMode(QAbstractItemView.SingleSelection)
+        # self.result1Tbl.setStyleSheet("QTableWidget::item:selected{ background-color: #fcba03}")
+        # self.pathTbl.itemSelectionChanged.connect(self.drawPath)
+        # self.result1Tbl.setSortingEnabled(True)
+
+
+
+        result1LayOut.addRow(self.result1Tbl)
+
+        self.avgResult1 = QLabel(str(0))
+
+        result1LayOut.addRow("Average trespasser detection rate: ", self.avgResult1)
+
+        exportButton = QPushButton("Export result to .csv")
+        exportButton.clicked.connect(self.exportResult)
+        result1LayOut.addRow(exportButton)
+
+        result1GroupBox.setLayout(result1LayOut)
+
+        layout.addWidget(result1GroupBox)
+
+        return layout
+
     def setTrespasserArrivalRate(self, v):
         self.trespasser_arrival_rate = v
 
@@ -558,6 +620,12 @@ class BorderSim(QWidget):
         else:
             self.zoning = False
 
+    def exportResult(self):
+        options = QFileDialog.Options()
+        fileName, _ = QFileDialog.getSaveFileName(self, "QFileDialog.getSaveFileName()","","All Files (*);;Text Files (*.csv)", options=options)
+        if fileName:
+            self.result1_df.to_csv(fileName, sep=",", header=True, index=False)
+
     def createSimCtrlLayOut(self):
         layout = QFormLayout()
         numPeriod = QSpinBox()
@@ -580,18 +648,25 @@ class BorderSim(QWidget):
         layout.addRow("Time Stage Duration (ms)", stageDuration)
 
         simcontrolBtn = QHBoxLayout()
-        runButton = QPushButton("Run Simulation")
-        runButton.clicked.connect(self.startSim)
-        pauseButton = QPushButton("Pause Simulation")
-        pauseButton.clicked.connect(self.pauseSim)
-        resetButton = QPushButton("Reset Simulation")
-        resetButton.clicked.connect(self.resetSim)
-        stopButton = QPushButton("Stop Simulation")
-        stopButton.clicked.connect(self.stopSim)
-        simcontrolBtn.addWidget(runButton)
-        simcontrolBtn.addWidget(pauseButton)
-        simcontrolBtn.addWidget(resetButton)
-        simcontrolBtn.addWidget(stopButton)
+        self.runButton = QPushButton("Run Simulation")
+        self.runButton.clicked.connect(self.startSim)
+        self.pauseButton = QPushButton("Pause Simulation")
+        self.pauseButton.clicked.connect(self.pauseSim)
+        self.resumeButton = QPushButton("Resume Simulation")
+        self.resumeButton.clicked.connect(self.resumeSim)
+        self.resetButton = QPushButton("Reset Simulation")
+        self.resetButton.clicked.connect(self.resetSim)
+        self.stopButton = QPushButton("Stop Simulation")
+        self.stopButton.clicked.connect(self.stopSim)
+        self.pauseButton.setDisabled(True)
+        self.resumeButton.setDisabled(True)
+        self.resetButton.setDisabled(True)
+        self.stopButton.setDisabled(True)
+        simcontrolBtn.addWidget(self.runButton)
+        simcontrolBtn.addWidget(self.pauseButton)
+        simcontrolBtn.addWidget(self.resumeButton)
+        simcontrolBtn.addWidget(self.resetButton)
+        simcontrolBtn.addWidget(self.stopButton)
         layout.addRow(simcontrolBtn)
 
         # simStatusGroupBox = QGroupBox("Simulation Status")
@@ -608,10 +683,6 @@ class BorderSim(QWidget):
         #
         # layout.addRow(simStatusGroupBox)
 
-        return layout
-
-    def createResultLayOut(self):
-        layout = QFormLayout()
         return layout
 
     def onRowChanged(self, value):
@@ -1219,8 +1290,8 @@ class BorderSim(QWidget):
         bar_alpha = [d for d in self.segments if d["obj"].getTd() < 1]
         proximity_guard = int(np.ceil(self.number_row * 0.1))
         for p in range(self.num_patrol):
-            d_p = np.random.choice(bar_alpha, 1)
-            s_p = d_p[0]["obj"]
+            d_p = np.random.choice(bar_alpha)
+            s_p = d_p["obj"]
             patrolagent = PatrolAgent("patrol_" + str(p + 1), s_p,
                                       self.pos_x + (int(s_p.getCol() - 1) * self.grid_width),
                                       self.pos_y + (int(s_p.getRow()) - 1) * self.grid_width,
@@ -1239,8 +1310,8 @@ class BorderSim(QWidget):
         middle_col = int(self.number_col / 2) + 1
         bar_alpha = [d for d in self.segments if d["obj"].getTd() < 1 and d["col"] == middle_col]
         for p in range(self.num_patrol):
-            d_p = np.random.choice(bar_alpha, 1)
-            s_p = d_p[0]["obj"]
+            d_p = np.random.choice(bar_alpha)
+            s_p = d_p["obj"]
             patrolagent = PatrolAgent("patrol_" + str(p + 1), s_p,
                                       self.pos_x + (int(s_p.getCol() - 1) * self.grid_width),
                                       self.pos_y + (int(s_p.getRow()) - 1) * self.grid_width,
@@ -1256,8 +1327,8 @@ class BorderSim(QWidget):
         bar_alpha = [d for d in self.segments if
                      d["obj"].getTd() < 1 and (d["col"] == first_col or d["col"] == second_col)]
         for p in range(self.num_patrol):
-            d_p = np.random.choice(bar_alpha, 1)
-            s_p = d_p[0]["obj"]
+            d_p = np.random.choice(bar_alpha)
+            s_p = d_p["obj"]
             patrolagent = PatrolAgent("patrol_" + str(p + 1), s_p,
                                       self.pos_x + (int(s_p.getCol() - 1) * self.grid_width),
                                       self.pos_y + (int(s_p.getRow()) - 1) * self.grid_width,
@@ -1315,8 +1386,8 @@ class BorderSim(QWidget):
                 expanding.extend(nextexpand)
                 nextexpand = []
 
-            d_p = np.random.choice(bar_alpha_p, 1)
-            s_p = d_p[0]["obj"]
+            d_p = np.random.choice(bar_alpha_p)
+            s_p = d_p["obj"]
             patrolagent = PatrolAgent("patrol_" + str(p + 1), s_p,
                                       self.pos_x + (int(s_p.getCol() - 1) * self.grid_width),
                                       self.pos_y + (int(s_p.getRow()) - 1) * self.grid_width,
@@ -1331,8 +1402,8 @@ class BorderSim(QWidget):
             s_e = e["obj"]
             s_e.setZone("patrol_" + str(self.num_patrol))
 
-        d_p = np.random.choice(bar_alpha, 1)
-        s_p = d_p[0]["obj"]
+        d_p = np.random.choice(bar_alpha)
+        s_p = d_p["obj"]
         patrolagent = PatrolAgent("patrol_" + str(self.num_patrol), s_p,
                                   self.pos_x + (int(s_p.getCol() - 1) * self.grid_width),
                                   self.pos_y + (int(s_p.getRow()) - 1) * self.grid_width,
@@ -1390,19 +1461,34 @@ class BorderSim(QWidget):
         #     s.setCurrentLoc(startA)
         #     s_node = s.getNode()
         #     s_node.setPos(0, 0)
-        self.curP = 1
-        self.curT = 1
-        self.display_sim_status_val.setPlainText("Running")
+        self.pauseButton.setDisabled(False)
+        self.resumeButton.setDisabled(True)
+        self.resetButton.setDisabled(False)
+        self.stopButton.setDisabled(False)
+        self.runButton.setDisabled(True)
+        self.resetSim()
+
+    def resumeSim(self):
+        self.pauseButton.setDisabled(False)
+        self.resumeButton.setDisabled(True)
         self.timer.start(self.stage_duration * 1000)
 
     def pauseSim(self):
+        self.pauseButton.setDisabled(True)
+        self.resumeButton.setDisabled(False)
         self.display_sim_status_val.setPlainText("Paused")
         self.timer.stop()
 
     def resetSim(self):
         self.timer.stop()
-        self.curP = 0
+
+        self.curP = 1
         self.curT = 0
+        self.number_t_entry = 0
+        self.number_t_exit = 0
+        self.number_t_detected = 0
+        self.resetLoc()
+        self.initResult1Table()
         self.display_cur_period_val.setPlainText(str(self.curP))
         self.display_cur_stage_val.setPlainText(str(self.curT))
         self.display_sim_status_val.setPlainText("Stopped")
@@ -1419,12 +1505,21 @@ class BorderSim(QWidget):
         #     p.setPOMDPStatus(False)
         #
         # self.trespassers = []
-        self.startSim()
+        self.avgResult1.setText(str(0))
+        self.display_sim_status_val.setPlainText("Running")
+        self.timer.start(self.stage_duration * 1000)
 
     def stopSim(self):
-
-        self.curP = 0
+        self.pauseButton.setDisabled(True)
+        self.resumeButton.setDisabled(True)
+        self.resetButton.setDisabled(True)
+        self.stopButton.setDisabled(True)
+        self.runButton.setDisabled(False)
+        self.curP = 1
         self.curT = 0
+        self.number_t_entry = 0
+        self.number_t_exit = 0
+        self.number_t_detected = 0
         self.display_sim_status_val.setPlainText("Stopped")
         # for t in self.trespassers:
         #     if t.getStatus() == 1:
@@ -1443,23 +1538,85 @@ class BorderSim(QWidget):
         return
         # self.timer.stop()
 
+    def resetLoc(self):
+        for l in self.patrols:
+            s_cur = l.getCurLoc()
+            l_point = s_cur.pos()
+            s_init = l.getInitLoc()
+            l.setPos(l_point.x() + (s_init.getCol() - s_cur.getCol()) * self.grid_width,
+                     l_point.y() + (s_init.getRow() - s_cur.getRow()) * self.grid_width)
+
+
+    def initResult1Table(self):
+        self.result1Tbl.clearContents()
+
+        for rnd in range(self.num_period):
+            self.result1Tbl.insertRow(self.result1Tbl.rowCount())
+            item0 = QTableWidgetItem()
+            item0.setData(Qt.DisplayRole, rnd+1)
+            item1 = QTableWidgetItem()
+            item1.setData(Qt.DisplayRole, 0)
+            item2 = QTableWidgetItem()
+            item2.setData(Qt.DisplayRole, 0)
+            item3 = QTableWidgetItem()
+            item3.setData(Qt.DisplayRole, 0)
+            item4 = QTableWidgetItem()
+            item4.setData(Qt.DisplayRole, 0)
+            self.result1Tbl.setItem(rnd, 0, item0)
+            self.result1Tbl.setItem(rnd, 1, item1)
+            self.result1Tbl.setItem(rnd, 2, item2)
+            self.result1Tbl.setItem(rnd, 3, item3)
+            self.result1Tbl.setItem(rnd, 4, item4)
 
     def simulate(self):
         if self.curT > self.period_len:
-            self.curT = 1
+            self.curT = 0
             self.curP = self.curP + 1
+            detection_rate = 0
+            if self.number_t_exit + self.number_t_detected > 0:
+                detection_rate = float(self.number_t_detected / (self.number_t_exit + self.number_t_detected))
+                item = QTableWidgetItem()
+                item.setData(Qt.DisplayRole, float(self.number_t_detected/(self.number_t_exit + self.number_t_detected)))
+                self.detection_rate_per_round.append(
+                    float(self.number_t_detected / (self.number_t_exit + self.number_t_detected)))
+            else:
+                detection_rate = 0
+                item = QTableWidgetItem()
+                item.setData(Qt.DisplayRole, 0)
+                self.detection_rate_per_round.append(0)
+
+            self.result1Tbl.setItem(self.curP-2, 4, item)
+            data_series = pd.Series([
+                self.number_t_entry,
+                self.number_t_exit,
+                self.number_t_detected,
+                detection_rate
+            ], index=[
+                'entering',
+                'leaving',
+                'detected',
+                'detection_rate'
+            ])
+            self.result1_df = self.result1_df.append(data_series, ignore_index=True)
+            self.number_t_entry = 0
+            self.number_t_exit = 0
+            self.number_t_detected = 0
         if self.curP > self.num_period:
+            self.avg_tres_detection_rate = self.result1_df['detection_rate'].mean()
+            self.avgResult1.setText(str(self.avg_tres_detection_rate))
             self.stopSim()
             return
 
         self.display_cur_period_val.setPlainText(str(self.curP))
         self.display_cur_stage_val.setPlainText(str(self.curT))
 
-        if self.curT == 1:
+        if self.curT == 0:
             for p in self.patrols:
                 p.resetObservation()
                 p.resetFoundTrespasser()
                 p.setPOMDPStatus(False)
+            for k in self.trespassers:
+                self.scene.removeItem(k)
             self.generateTrespassers()
             self.generateNoise()
             self.generatePatrolPlan()
@@ -1473,19 +1630,28 @@ class BorderSim(QWidget):
             if not np.isinf(d["obj"].getPFp()):
                 d["obj"].setPFp(d["obj"].getPFp()+1)
         # move trespasser
-        with parallel_backend('threading', n_jobs=len(self.trespassers)):
-            Parallel()(delayed(self.moveOneTrespasser)(i) for i in self.trespassers)
+        # if len(self.trespassers) > 0:
+        #     with parallel_backend('threading', n_jobs=len(self.trespassers)):
+        #         Parallel()(delayed(self.moveOneTrespasser)(i) for i in self.trespassers)
+        for i in self.trespassers:
+            self.moveOneTrespasser(i)
 
-        with parallel_backend('threading', n_jobs=len(self.noises)):
-            Parallel()(delayed(self.moveOneNoise)(i) for i in self.noises)
+        # if len(self.noises) > 0:
+        #     with parallel_backend('threading', n_jobs=len(self.noises)):
+        #         Parallel()(delayed(self.moveOneNoise)(i) for i in self.noises)
+        for i in self.noises:
+            self.moveOneNoise(i)
 
         self.trespasser_found = False
         # move patrol
-        with parallel_backend('threading', n_jobs=self.num_patrol):
-            Parallel()(delayed(self.patrolProcess)(i) for i in self.patrols)
+        # with parallel_backend('threading', n_jobs=self.num_patrol):
+        #     Parallel()(delayed(self.patrolProcess)(i) for i in self.patrols)
+        for i in self.patrols:
+            self.patrolProcess(i)
 
-        with parallel_backend('threading', n_jobs=self.num_patrol):
-            Parallel()(delayed(self.detectionProcess)(i) for i in self.patrols)
+        # with parallel_backend('threading', n_jobs=self.num_patrol):
+        #     Parallel()(delayed(self.detectionProcess)(i) for i in self.patrols)
+
 
         if self.trespasser_move_model == 2:
             for k in self.trespassers:
@@ -1569,8 +1735,10 @@ class BorderSim(QWidget):
                             self.heuristicPath(l, self.curT)
 
         else:
-            with parallel_backend('threading', n_jobs=self.num_patrol):
-                Parallel()(delayed(self.rePlanningProcess)(i) for i in self.patrols)
+            # with parallel_backend('threading', n_jobs=self.num_patrol):
+            #     Parallel()(delayed(self.rePlanningProcess)(i) for i in self.patrols)
+            for i in self.patrols:
+                self.rePlanningProcess(i)
 
         # if self.trespasser_found and (self.patrol_move_model == 3 or self.patrol_move_model == 4):
         #     # update patrol path
@@ -1588,6 +1756,10 @@ class BorderSim(QWidget):
             s_cur.setLastTrespassedBy(k)
             k.setStatus(1)
             self.scene.addItem(k)
+            self.number_t_entry = self.number_t_entry + 1
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, self.number_t_entry)
+            self.result1Tbl.setItem(self.curP-1, 1, item)
 
         elif k.getArrTime() < self.curT and k.getStatus() == 1 and k.getCurLoc().getCol() != self.number_col:
             k_point = k.pos()
@@ -1604,8 +1776,8 @@ class BorderSim(QWidget):
                 s.setLastTrespassedBy(k)
             else:
                 surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
-                d_random = np.random.choice(surroundings, 1)
-                s_random = d_random[0]["obj"]
+                d_random = np.random.choice(surroundings)
+                s_random = d_random["obj"]
                 k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
                          k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
                 k.setCurLoc(s_random)
@@ -1618,6 +1790,10 @@ class BorderSim(QWidget):
                 k.addTrespassed(s_cur)
             k.setStatus(3)
             self.scene.removeItem(k)
+            self.number_t_exit = self.number_t_exit + 1
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, self.number_t_exit)
+            self.result1Tbl.setItem(self.curP - 1, 2, item)
 
     def moveOneNoise(self, noise):
         if noise.getArrTime() == self.curT and noise.getStatus() == 0:
@@ -1632,8 +1808,8 @@ class BorderSim(QWidget):
             # s_cur.setFp(s_cur.getTFp() + 1)
 
             surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
-            d_random = np.random.choice(surroundings, 1)
-            s_random = d_random[0]["obj"]
+            d_random = np.random.choice(surroundings)
+            s_random = d_random["obj"]
             noise.setPos(n_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
                          n_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
             noise.setCurLoc(s_random)
@@ -1645,17 +1821,25 @@ class BorderSim(QWidget):
             self.scene.removeItem(noise)
 
     def patrolProcess(self, l):
-        if self.curT == 1 and self.curP == 1:
-            s_cur = l.getInitLoc()
+        if self.curT == 0:
+            s_cur = l.getCurLoc()
             s_cur.setPFp(0)
             s_cur.setLastPatrolledBy(l)
             s_cur.setLastPatrolledAt(self.curT)
-            l.setPos(0, 0)
+            # l.setPos(0, 0)
             l.setStatus(1)
-        elif self.curT > 1 and l.getStatus() == 2:
-            if l.getInvestigatingTime() < self.investigation_time:
+            # self.detectionProcess(l)
+        elif self.curT >= 1 and l.getStatus() == 2:
+            s = l.getSegmentFromPlan(self.curT)
+            l.setCurLoc(s)
+            s.setPFp(0)
+            s.setLastPatrolledBy(l)
+            s.setLastPatrolledAt(self.curT)
+            if l.getInvestigatingTime() < (self.investigation_time - 1):
+                print("***investigating****")
                 l.incrementInvestigatingTime()
             else:
+                print("***finish investigating****")
                 l.setStatus(1)
                 l.resetInvestigatingTime()
                 # update statistic in trespassed segments if detected entity is trespasser
@@ -1666,45 +1850,50 @@ class BorderSim(QWidget):
                         s_tres.calScore(self.accu_tres)
                     # report trespasser found
                     self.trespasser_found = True
+                    founded_tres = l.getInvestigatedEntity()
+                    l.addFoundTrespasser(self.curP, self.curT, founded_tres)
+                    self.scene.removeItem(founded_tres)
                     self.number_t_detected = self.number_t_detected + 1
-                    l.addFoundTrespasser(self.curP, self.curT, l.getInvestigatedEntity())
-                    self.scene.removeItem(l.getInvestigatedEntity())
+                    item = QTableWidgetItem()
+                    item.setData(Qt.DisplayRole, self.number_t_detected)
+                    self.result1Tbl.setItem(self.curP - 1, 3, item)
                     # l.isFoundTrespasser = True
                 # reset investigated entity to none
                 l.setInvestigatedEntity(None)
                 # determine patrol plan after exiting an investigation
-                if self.patrol_move_model == 1 or self.patrol_move_model == 2:
-                    self.barrierPath(l, self.curT)
-                elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
-                    self.heuristicPath(l, self.curT)
+                # if self.patrol_move_model == 1 or self.patrol_move_model == 2:
+                #     self.barrierPath(l, self.curT)
+                # elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
+                #     self.heuristicPath(l, self.curT)
 
         else:
             l_point = l.pos()
             s_cur = l.getCurLoc()
-            if self.patrol_move_model != 0:
-                s = l.getSegmentFromPlan(self.curT)
-                l.setPos(l_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
-                         l_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
-                l.setCurLoc(s)
-                s.setPFp(0)
-                s.setLastPatrolledBy(l)
-                s.setLastPatrolledAt(self.curT)
-            else:
-                surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
-                d_random = np.random.choice(surroundings, 1)
-                s_random = d_random[0]["obj"]
-                l.setPos(l_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
-                         l_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
-                l.setCurLoc(s_random)
-                s_random.setPFp(0)
-                s_random.setLastPatrolledBy(l)
-                s_random.setLastPatrolledAt(self.curT)
+            # if self.patrol_move_model != 0:
+            s = l.getSegmentFromPlan(self.curT)
+            l.setPos(l_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
+                     l_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
+            l.setCurLoc(s)
+            s.setPFp(0)
+            s.setLastPatrolledBy(l)
+            s.setLastPatrolledAt(self.curT)
+            self.detectionProcess(l)
+            # else:
+            #     surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+            #     d_random = np.random.choice(surroundings, 1)
+            #     s_random = d_random[0]["obj"]
+            #     l.setPos(l_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+            #              l_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+            #     l.setCurLoc(s_random)
+            #     s_random.setPFp(0)
+            #     s_random.setLastPatrolledBy(l)
+            #     s_random.setLastPatrolledAt(self.curT)
 
     def detectionProcess(self, l):
         p_loc = l.getCurLoc()
         for k in self.trespassers:
             k_loc = k.getCurLoc()
-            if p_loc == k_loc:
+            if p_loc == k_loc and k.getStatus() == 1:
                 detection_result = np.random.choice([0, 1],
                                                     p=[1 - self.detection_coef * (1 - p_loc.getOb()),
                                                        self.detection_coef * (1 - p_loc.getOb())])
@@ -1717,9 +1906,14 @@ class BorderSim(QWidget):
                         if d["obj"].getLastTrespassedBy() == k:
                             d["obj"].setLastTrespassedBy(None)
                             d["obj"].setTFp(np.inf)
+                    # delay plan for t_I stages
+                    for t in range(self.investigation_time):
+                        l.delayPlan(p_loc)
+                        l.setReplanStage(l.getReplanStage()+1)
 
     def rePlanningProcess(self, l):
-        if l.getReplanStage() == self.curT:
+        if l.getReplanStage() == self.curT and l.getStatus() == 1:
+            print("%s replans at stage %i" % (l.getId(), self.curT))
             comm_result = np.random.choice([0, 1], p=[1 - self.comm_success_rate, self.comm_success_rate])
             if comm_result == 1:
                 l.copySegmentsInfo(self.segments)
@@ -1748,37 +1942,22 @@ class BorderSim(QWidget):
         n = np.random.poisson(self.trespasser_arrival_rate)
         entries = [d for d in self.segments if d["col"] == 1 and d["obj"].getTd() < 1]
         exits = [d for d in self.segments if d["col"] == self.number_col and d["obj"].getTd() < 1]
-        # model_p = [r/100 for r in self.trespasser_move_model]
-        with parallel_backend('threading', n_jobs=n):
-            results = Parallel()(delayed(self.genOneTrespasser)(i, entries, exits) for i in range(n))
-            self.trespassers = results
-        # for i in range(n):
-        #     # trespasser's poisson arrival time
-        #     arr_time = np.floor(np.random.uniform(1, self.period_len))
-        #     # random select entry segment
-        #     entry_s = np.random.choice(entries, 1)
-        #     exit_s = np.random.choice(exits, 1)
-        #     s_en = entry_s[0]["obj"]
-        #     s_ex = exit_s[0]["obj"]
-        #     # add new trespasser
-        #     trespasser = TrespasserAgent('tres_' + str(i + 1), s_en, s_ex, arr_time,
-        #                                  self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
-        #                                  self.pos_y + (int(s_en.getRow()) - 1) * self.grid_width,
-        #                                  self.grid_width, self.grid_width)
-        #     mm = np.random.choice([0, 1, 2], p=self.trespasser_move_model)
-        #     trespasser.setMoveModel(mm)
-        #     if mm != 0:
-        #         self.findTrespasserPath(trespasser, s_en, s_ex)
-        #     self.trespassers.append(trespasser)
+        # if n > 0:
+        # with parallel_backend('threading', n_jobs=n):
+        #     results = Parallel()(delayed(self.genOneTrespasser)(i, entries, exits) for i in range(n))
+        #     self.trespassers = results
+        for i in range(n):
+            self.trespassers.append(self.genOneTrespasser(i, entries, exits))
+
 
     def genOneTrespasser(self, i, entries, exits):
         # trespasser's poisson arrival time
         arr_time = np.floor(np.random.uniform(1, self.period_len))
         # random select entry segment
-        entry_s = np.random.choice(entries, 1)
-        exit_s = np.random.choice(exits, 1)
-        s_en = entry_s[0]["obj"]
-        s_ex = exit_s[0]["obj"]
+        entry_s = np.random.choice(entries)
+        exit_s = np.random.choice(exits)
+        s_en = entry_s["obj"]
+        s_ex = exit_s["obj"]
         # add new trespasser
         trespasser = TrespasserAgent('tres_' + str(i + 1), s_en, s_ex, arr_time,
                                      self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
@@ -1801,9 +1980,12 @@ class BorderSim(QWidget):
         n = np.random.poisson(self.trespasser_arrival_rate*self.noise_rate/100)
         entries = [d for d in self.segments if d["col"] == 1 and d["obj"].getTd() < 1]
         # exits = [d for d in self.segments if d["col"] == self.number_col and d["obj"].getTd() < 1]
-        with parallel_backend('threading', n_jobs=n):
-            results = Parallel()(delayed(self.genOneNoise)(i, entries) for i in range(n))
-            self.noises = results
+        if n > 0:
+            for i in range(n):
+                self.genOneNoise(i, entries)
+            # with parallel_backend('threading', n_jobs=n):
+            #     results = Parallel()(delayed(self.genOneNoise)(i, entries) for i in range(n))
+            #     self.noises = results
         # for i in range(n):
         #     # trespasser's poisson arrival time
         #     arr_time = np.floor(np.random.uniform(1, self.period_len))
@@ -1821,8 +2003,8 @@ class BorderSim(QWidget):
         # trespasser's poisson arrival time
         arr_time = np.floor(np.random.uniform(1, self.period_len))
         # random select entry segment
-        entry_s = np.random.choice(entries, 1)
-        s_en = entry_s[0]["obj"]
+        entry_s = np.random.choice(entries)
+        s_en = entry_s["obj"]
         # add new trespasser
         noise = Noise('noise_' + str(i + 1), s_en, arr_time,
                       self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
@@ -1831,21 +2013,22 @@ class BorderSim(QWidget):
         return noise
 
     def generatePatrolPlan(self):
-        if self.patrol_move_model == 0:
-            return
-        with parallel_backend('threading', n_jobs=self.num_patrol):
-            Parallel()(delayed(self.genOnePatrolInitPlan)(p) for p in self.patrols)
+        if self.num_patrol:
+            for p in self.patrols:
+                self.genOnePatrolInitPlan(p)
+            # with parallel_backend('threading', n_jobs=self.num_patrol):
+            #     Parallel()(delayed(self.genOnePatrolInitPlan)(p) for p in self.patrols)
 
 
     def genOnePatrolInitPlan(self, p):
         p.copySegmentsInfo(self.segments)
         p.setRecordedStat(self.accu_tres)
         if self.patrol_move_model == 1 or self.patrol_move_model == 2:
-            self.barrierPath(p, 1)
+            self.barrierPath(p, 0)
         elif self.patrol_move_model == 3 or self.patrol_move_model == 4:
-            self.heuristicPath(p, 1)
+            self.heuristicPath(p, 0)
         else:
-            self.randomPath(p, 1)
+            self.randomPath(p, 0)
 
 
     def findTrespasserPath(self, t, en, ex):
@@ -2039,28 +2222,28 @@ class BorderSim(QWidget):
     def randomPath(self, p, t):
         s_c = p.getCurLoc()
         p.resetPlan()
-        p.addToPlan(t, s_c)
-        for tt in range(t + 1, t + self.planning_stages):
+        # p.addToPlan(t, s_c)
+        for tt in range(t + 1, t + self.planning_stages + 1):
             if self.zoning:
                 d_k = self.findSurroundingInZone(p, s_c.getRow(), s_c.getCol())
             else:
                 d_k = self.findSurrounding(s_c.getRow(), s_c.getCol())
 
-            d_c = np.random.choice(d_k, 1)
+            d_c = np.random.choice(d_k)
             s_c = d_c["obj"]
             p.addToPlan(tt, s_c)
-        p.setReplanStage(t + self.planning_stages - 1)
+        p.setReplanStage(t + self.planning_stages)
 
     def barrierPath(self, p, t):
         s_c = p.getCurLoc()
         p.resetPlan()
-        p.addToPlan(t, s_c)
-        for tt in range(t+1, t + self.planning_stages):
+        # p.addToPlan(t, s_c)
+        for tt in range(t + 1, t + self.planning_stages + 1):
             d_a = self.findUpDownSegments(s_c.getRow(), s_c.getCol())
-            d_c = np.random.choice(d_a, 1)
+            d_c = np.random.choice(d_a)
             s_c = d_c["obj"]
             p.addToPlan(tt, s_c)
-        p.setReplanStage(t + self.planning_stages - 1)
+        p.setReplanStage(t + self.planning_stages)
 
 
     def heuristicPath(self, p, t):
@@ -2073,7 +2256,7 @@ class BorderSim(QWidget):
         p.setPl([])
         p.addPath(pa)
         # p.addToPlan(1, s_c)
-        for k in range(t+1, t + self.planning_stages):
+        for k in range(t+1, t + self.planning_stages + 1):
             pl = p.getPl()
             pll = []
             for pa_ in pl:
@@ -2110,7 +2293,7 @@ class BorderSim(QWidget):
         for cell in max_pa.getCells():
             p.addToPlan(tt, cell)
             tt = tt + 1
-        p.setReplanStage(t + self.planning_stages - 1)
+        p.setReplanStage(t + self.planning_stages)
 
 
     def POMDPPlanning(self, p):
@@ -2159,8 +2342,8 @@ if __name__ == "__main__":
     palette.setColor(QPalette.ButtonText, Qt.white)
     palette.setColor(QPalette.BrightText, Qt.red)
 
-    palette.setColor(QPalette.Highlight, QColor(142, 45, 197).lighter())
-    palette.setColor(QPalette.HighlightedText, Qt.black)
+    palette.setColor(QPalette.Highlight, QColor(222, 44, 124).lighter())
+    palette.setColor(QPalette.HighlightedText, QColor(53, 53, 53))
     app.setPalette(palette)
 
     window = BorderSim()
