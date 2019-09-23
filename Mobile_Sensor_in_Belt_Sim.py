@@ -1772,6 +1772,7 @@ class BorderSim(QWidget):
                 k.setPos(k_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
                          k_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
                 k.setCurLoc(s)
+                k.setPrevLoc(s_cur)
                 s.setTFp(0)
                 s.setLastTrespassedBy(k)
             else:
@@ -1781,6 +1782,7 @@ class BorderSim(QWidget):
                 k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
                          k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
                 k.setCurLoc(s_random)
+                k.setPrevLoc(s_cur)
                 s_random.setTFp(0)
                 s_random.setLastTrespassedBy(k)
 
@@ -1813,6 +1815,7 @@ class BorderSim(QWidget):
             noise.setPos(n_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
                          n_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
             noise.setCurLoc(s_random)
+            noise.setPrevLoc(s_cur)
         elif noise.getStatus() == 1 and \
                 (noise.getCurLoc().getCol() == self.number_col or noise.getCurLoc().getCol() == 1 or
                  noise.getCurLoc().getRow() == self.number_row or noise.getCurLoc().getRow() == 1):
@@ -1832,6 +1835,7 @@ class BorderSim(QWidget):
         elif self.curT >= 1 and l.getStatus() == 2:
             s = l.getSegmentFromPlan(self.curT)
             l.setCurLoc(s)
+            l.setPrevLoc(None)
             s.setPFp(0)
             s.setLastPatrolledBy(l)
             s.setLastPatrolledAt(self.curT)
@@ -1874,6 +1878,7 @@ class BorderSim(QWidget):
             l.setPos(l_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
                      l_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
             l.setCurLoc(s)
+            l.setPrevLoc(s_cur)
             s.setPFp(0)
             s.setLastPatrolledBy(l)
             s.setLastPatrolledAt(self.curT)
@@ -1891,9 +1896,11 @@ class BorderSim(QWidget):
 
     def detectionProcess(self, l):
         p_loc = l.getCurLoc()
+        p_prev = l.getPrevLoc()
         for k in self.trespassers:
             k_loc = k.getCurLoc()
-            if p_loc == k_loc and k.getStatus() == 1:
+            k_prev = k.getPrevLoc()
+            if (p_loc == k_loc or (p_prev == k_loc and p_loc == k_prev)) and n.getStatus() == 1 and l.getStatus() == 1:
                 detection_result = np.random.choice([0, 1],
                                                     p=[1 - self.detection_coef * (1 - p_loc.getOb()),
                                                        self.detection_coef * (1 - p_loc.getOb())])
@@ -1910,6 +1917,23 @@ class BorderSim(QWidget):
                     for t in range(self.investigation_time):
                         l.delayPlan(p_loc)
                         l.setReplanStage(l.getReplanStage()+1)
+
+        for n in self.noises:
+            n_loc = n.getCurLoc()
+            n_prev = n.getPrevLoc()
+            if (p_loc == n_loc or (p_prev == n_loc and p_loc == n_prev)) and n.getStatus() == 1 and l.getStatus() == 1:
+                detection_result = np.random.choice([0, 1],
+                                                    p=[1 - self.detection_coef * (1 - p_loc.getOb()),
+                                                       self.detection_coef * (1 - p_loc.getOb())])
+                if detection_result == 1:
+                    n.setStatus(2)
+                    l.setStatus(2)
+                    l.setInvestigatedEntity(k)
+                    # delay plan for t_I stages
+                    for t in range(self.investigation_time):
+                        l.delayPlan(p_loc)
+                        l.setReplanStage(l.getReplanStage() + 1)
+
 
     def rePlanningProcess(self, l):
         if l.getReplanStage() == self.curT and l.getStatus() == 1:
@@ -1943,9 +1967,9 @@ class BorderSim(QWidget):
         entries = [d for d in self.segments if d["col"] == 1 and d["obj"].getTd() < 1]
         exits = [d for d in self.segments if d["col"] == self.number_col and d["obj"].getTd() < 1]
         # if n > 0:
-        # with parallel_backend('threading', n_jobs=n):
-        #     results = Parallel()(delayed(self.genOneTrespasser)(i, entries, exits) for i in range(n))
-        #     self.trespassers = results
+            # with parallel_backend('threading', n_jobs=n):
+            #     results = Parallel()(delayed(self.genOneTrespasser)(i, entries, exits) for i in range(n))
+            #     self.trespassers = results
         for i in range(n):
             self.trespassers.append(self.genOneTrespasser(i, entries, exits))
 
@@ -1980,24 +2004,13 @@ class BorderSim(QWidget):
         n = np.random.poisson(self.trespasser_arrival_rate*self.noise_rate/100)
         entries = [d for d in self.segments if d["col"] == 1 and d["obj"].getTd() < 1]
         # exits = [d for d in self.segments if d["col"] == self.number_col and d["obj"].getTd() < 1]
-        if n > 0:
-            for i in range(n):
-                self.genOneNoise(i, entries)
+        # if n > 0:
+        for i in range(n):
+            self.genOneNoise(i, entries)
             # with parallel_backend('threading', n_jobs=n):
             #     results = Parallel()(delayed(self.genOneNoise)(i, entries) for i in range(n))
             #     self.noises = results
-        # for i in range(n):
-        #     # trespasser's poisson arrival time
-        #     arr_time = np.floor(np.random.uniform(1, self.period_len))
-        #     # random select entry segment
-        #     entry_s = np.random.choice(entries, 1)
-        #     s_en = entry_s[0]["obj"]
-        #     # add new trespasser
-        #     noise = Noise('noise_' + str(i + 1), s_en, arr_time,
-        #                                  self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
-        #                                  self.pos_y + (int(s_en.getRow()) - 1) * self.grid_width,
-        #                                  self.grid_width, self.grid_width)
-        #     self.noises.append(noise)
+
 
     def genOneNoise(self, i, entries):
         # trespasser's poisson arrival time

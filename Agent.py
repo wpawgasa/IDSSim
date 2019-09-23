@@ -11,6 +11,7 @@ class Agent(QGraphicsEllipseItem):
         super(Agent, self).__init__(x, y, w, h, parent)
         self.initLoc = loc
         self.curLoc = loc
+        self.prevLoc = None
         # self.plan = {}
         self.plan = []
 
@@ -19,6 +20,12 @@ class Agent(QGraphicsEllipseItem):
 
     def getCurLoc(self):
         return self.curLoc
+
+    def setPrevLoc(self, loc):
+        self.prevLoc = loc
+
+    def getPrevLoc(self):
+        return self.prevLoc
 
     def setInitLoc(self, loc):
         self.initLoc = loc
