@@ -1489,6 +1489,7 @@ class BorderSim(QWidget):
         self.number_t_detected = 0
         self.resetLoc()
         self.initResult1Table()
+        self.result1_df = pd.DataFrame(columns=['entering', 'leaving', 'detected', 'detection_rate'])
         self.display_cur_period_val.setPlainText(str(self.curP))
         self.display_cur_stage_val.setPlainText(str(self.curT))
         self.display_sim_status_val.setPlainText("Stopped")
@@ -1900,7 +1901,7 @@ class BorderSim(QWidget):
         for k in self.trespassers:
             k_loc = k.getCurLoc()
             k_prev = k.getPrevLoc()
-            if (p_loc == k_loc or (p_prev == k_loc and p_loc == k_prev)) and n.getStatus() == 1 and l.getStatus() == 1:
+            if (p_loc == k_loc or (p_prev == k_loc and p_loc == k_prev)) and k.getStatus() == 1 and l.getStatus() == 1:
                 detection_result = np.random.choice([0, 1],
                                                     p=[1 - self.detection_coef * (1 - p_loc.getOb()),
                                                        self.detection_coef * (1 - p_loc.getOb())])
