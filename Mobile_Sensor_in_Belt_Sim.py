@@ -1998,6 +1998,9 @@ class BorderSim(QWidget):
         trespasser.setMoveModel(mm)
         if mm != 0:
             self.findTrespasserPath(trespasser, s_en, s_ex)
+        else:
+            self.findRandomTrespassingPaths(trespasser, s_en, s_ex)
+
         return trespasser
 
 
@@ -2049,6 +2052,47 @@ class BorderSim(QWidget):
             self.heuristicPath(p, 0)
         else:
             self.randomPath(p, 0)
+
+    def findRandomTrespassingPaths(self, t, en, ex):
+        incompleted_paths = []
+        completed_paths = []
+
+        path = []
+        path.append(en)
+        incompleted_paths.append(path)
+
+        while len(incompleted_paths) > 0:
+
+            path = incompleted_paths[-1]
+            endpoint = path[-1]
+            if endpoint == ex:
+                incompleted_paths.remove(path)
+                completed_paths.append(path)
+
+            else:
+
+                dd = self.findSurrounding(endpoint.getRow(), endpoint.getCol())
+                path_found = 0
+                for d in dd:
+                    if not [s for s in path if s == d["obj"]]:
+                        path_found = path_found + 1
+                        if path_found == 1:
+                            path.append(d["obj"])
+                        else:
+                            new_path = path[:-1]
+                            new_path.append(d["obj"])
+                            incompleted_paths.append(new_path)
+
+                if path_found == 0:
+                    incompleted_paths.remove(path)
+
+        sel_path = np.random.choice(completed_paths)
+
+        stage = t.getArrTime()
+        for s in sel_path:
+            d = self.findSegment(s.get_i(), s.get_j())
+            t.addToPlan(stage, d["obj"])
+            stage = stage + 1
 
 
     def findTrespasserPath(self, t, en, ex):
