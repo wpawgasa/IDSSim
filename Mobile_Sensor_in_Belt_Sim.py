@@ -1436,6 +1436,12 @@ class BorderSim(QWidget):
                 ((d["row"] == i - 1 and d["col"] == j) or (d["row"] == i + 1 and d["col"] == j))
                 and d["obj"].getTd() < 1]
 
+    def findUpSegment(self, i, j):
+        return [d for d in self.segments if d["row"] == i + 1 and d["col"] == j and d["obj"].getTd() < 1]
+
+    def findDownSegment(self, i, j):
+        return [d for d in self.segments if d["row"] == i - 1 and d["col"] == j and d["obj"].getTd() < 1]
+
     def findSegmentsInZone(self, p):
         return [d for d in self.segments if d["obj"].getZone==p.getId()]
 
@@ -2252,10 +2258,21 @@ class BorderSim(QWidget):
         s_c = p.getCurLoc()
         p.resetPlan()
         # p.addToPlan(t, s_c)
+        direction = np.random.choice([-1,1])
         for tt in range(t + 1, t + self.planning_stages + 1):
-            d_a = self.findUpDownSegments(s_c.getRow(), s_c.getCol())
-            d_c = np.random.choice(d_a)
-            s_c = d_c["obj"]
+            if direction > 0:
+                d_a = self.findUpSegment(s_c.getRow(), s_c.getCol())
+                if d_a:
+                    s_c = d_a["obj"]
+                else:
+                    direction = direction * -1
+            else:
+                d_a = self.findDownSegment(s_c.getRow(), s_c.getCol())
+                if d_a:
+                    s_c = d_a["obj"]
+                else:
+                    direction = direction * -1
+
             p.addToPlan(tt, s_c)
         p.setReplanStage(t + self.planning_stages)
 
