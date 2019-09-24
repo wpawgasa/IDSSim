@@ -2065,7 +2065,7 @@ class BorderSim(QWidget):
 
             path = incompleted_paths[-1]
             endpoint = path[-1]
-            if endpoint == ex:
+            if endpoint.getCol() == self.number_col and endpoint.getTd() < 1:
                 incompleted_paths.remove(path)
                 completed_paths.append(path)
 
@@ -2087,7 +2087,8 @@ class BorderSim(QWidget):
                     incompleted_paths.remove(path)
 
         sel_path = np.random.choice(completed_paths)
-
+        print("select trespasser path for %s" % t.getId())
+        print(sel_path)
         stage = t.getArrTime()
         for s in sel_path:
             d = self.findSegment(s.get_i(), s.get_j())
