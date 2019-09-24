@@ -2263,13 +2263,13 @@ class BorderSim(QWidget):
             if direction > 0:
                 d_a = self.findUpSegment(s_c.getRow(), s_c.getCol())
                 if d_a:
-                    s_c = d_a["obj"]
+                    s_c = d_a[0]["obj"]
                 else:
                     direction = direction * -1
             else:
                 d_a = self.findDownSegment(s_c.getRow(), s_c.getCol())
                 if d_a:
-                    s_c = d_a["obj"]
+                    s_c = d_a[0]["obj"]
                 else:
                     direction = direction * -1
 
