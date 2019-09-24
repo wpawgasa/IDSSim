@@ -2054,39 +2054,101 @@ class BorderSim(QWidget):
             self.randomPath(p, 0)
 
     def findRandomTrespassingPaths(self, t, en, ex):
-        incompleted_paths = []
-        completed_paths = []
+        # incompleted_paths = []
+        # completed_paths = []
+        #
+        # path = []
+        # path.append(en)
+        # incompleted_paths.append(path)
+        #
+        # while len(incompleted_paths) > 0:
+        #
+        #     path = incompleted_paths[-1]
+        #     endpoint = path[-1]
+        #     if endpoint.getCol() == self.number_col and endpoint.getTd() < 1:
+        #         incompleted_paths.remove(path)
+        #         completed_paths.append(path)
+        #
+        #     else:
+        #
+        #         dd = self.findSurrounding(endpoint.getRow(), endpoint.getCol())
+        #         path_found = 0
+        #         for d in dd:
+        #             if not [s for s in path if s == d["obj"]]:
+        #                 path_found = path_found + 1
+        #                 if path_found == 1:
+        #                     path.append(d["obj"])
+        #                 else:
+        #                     new_path = path[:-1]
+        #                     new_path.append(d["obj"])
+        #                     incompleted_paths.append(new_path)
+        #
+        #         if path_found == 0:
+        #             incompleted_paths.remove(path)
+        #
+
+        # construct graph
+        g = Graph()
+        for x in range(1, self.number_row + 1):
+            for y in range(1, self.number_col + 1):
+                d = self.findSegment(x, y)
+                if d["obj"].getTd() < 1.0:
+                    g.add_vertex(str(x) + ',' + str(y), x, y)
+
+        vertice_keys = g.get_vertices()
+        visited = {}
+        for key in vertice_keys:
+            visited[key] = False
+            vertex = g.get_vertex(key)
+            # print(vertex)
+            v_i = vertex.get_i()
+            v_j = vertex.get_j()
+            v_1 = self.findSegment(v_i - 1, v_j - 1)
+            v_2 = self.findSegment(v_i - 1, v_j)
+            v_3 = self.findSegment(v_i - 1, v_j + 1)
+            v_4 = self.findSegment(v_i, v_j + 1)
+            v_5 = self.findSegment(v_i + 1, v_j + 1)
+            v_6 = self.findSegment(v_i + 1, v_j)
+            v_7 = self.findSegment(v_i + 1, v_j - 1)
+            v_8 = self.findSegment(v_i, v_j - 1)
+            if (v_i - 1 >= 1 and v_j - 1 >= 1) and v_1["obj"].getTd() < 1:
+                next_vertex = g.get_vertex(str(v_i - 1) + ',' + str(v_j - 1))
+                cost = 0
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i - 1 >= 1) and v_2["obj"].getTd() < 1:
+                next_vertex = g.get_vertex(str(v_i - 1) + ',' + str(v_j))
+                cost = 0
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i - 1 >= 1 and v_j + 1 <= self.number_col) and v_3["obj"].getTd() < 1:
+                next_vertex = g.get_vertex(str(v_i - 1) + ',' + str(v_j + 1))
+                cost = 0
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_j + 1 <= self.number_col) and v_4["obj"].getTd() < 1:
+                next_vertex = g.get_vertex(str(v_i) + ',' + str(v_j + 1))
+                cost = 0
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i + 1 <= self.number_row and v_j + 1 <= self.number_col) and v_5["obj"].getTd() < 1:
+                next_vertex = g.get_vertex(str(v_i + 1) + ',' + str(v_j + 1))
+                cost = 0
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i + 1 <= self.number_row) and v_6["obj"].getTd() < 1:
+                next_vertex = g.get_vertex(str(v_i + 1) + ',' + str(v_j))
+                cost = 0
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_i + 1 <= self.number_row and v_j - 1 >= 1) and v_7["obj"].getTd() < 1:
+                next_vertex = g.get_vertex(str(v_i + 1) + ',' + str(v_j - 1))
+                cost = 0
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            if (v_j - 1 >= 1) and v_8["obj"].getTd() < 1:
+                next_vertex = g.get_vertex(str(v_i) + ',' + str(v_j - 1))
+                cost = 0
+                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
 
         path = []
-        path.append(en)
-        incompleted_paths.append(path)
+        path_list = []
+        self.allPathUtil(g, en, ex, path, path_list)
 
-        while len(incompleted_paths) > 0:
-
-            path = incompleted_paths[-1]
-            endpoint = path[-1]
-            if endpoint.getCol() == self.number_col and endpoint.getTd() < 1:
-                incompleted_paths.remove(path)
-                completed_paths.append(path)
-
-            else:
-
-                dd = self.findSurrounding(endpoint.getRow(), endpoint.getCol())
-                path_found = 0
-                for d in dd:
-                    if not [s for s in path if s == d["obj"]]:
-                        path_found = path_found + 1
-                        if path_found == 1:
-                            path.append(d["obj"])
-                        else:
-                            new_path = path[:-1]
-                            new_path.append(d["obj"])
-                            incompleted_paths.append(new_path)
-
-                if path_found == 0:
-                    incompleted_paths.remove(path)
-
-        sel_path = np.random.choice(completed_paths)
+        sel_path = np.random.choice(path_list)
         print("select trespasser path for %s" % t.getId())
         print(sel_path)
         stage = t.getArrTime()
@@ -2095,6 +2157,24 @@ class BorderSim(QWidget):
             t.addToPlan(stage, d["obj"])
             stage = stage + 1
 
+
+
+
+    def allPathUtil(self, g, u, d, visited, path, path_list):
+        u_key = u.getRow() + ',' + u.getCol()
+        u_vertex = g.get_vertex(u_key)
+        visited[u_key] = True
+        path.append(u)
+
+        if u == d:
+            path_list.append(path)
+        else:
+            for v in u_vertex.adjacent:
+                if visited[v.get_id()] == False:
+                    [i,j] = v.get_id().split(",")
+                    d = self.findSegment(int(i), int(j))
+                    s = d["obj"]
+                    self.allPathUtil(g, s, d, visited, path, path_list)
 
     def findTrespasserPath(self, t, en, ex):
         # construct graph
