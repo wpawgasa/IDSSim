@@ -10,6 +10,7 @@ from functools import partial
 from dijkstra import Vertex, Graph, Dijkstra
 from joblib import Parallel, delayed, parallel_backend
 import pandas as pd
+from random import shuffle, sample
 
 sip.setapi('QString', 2)
 sip.setapi('QVariant', 2)
@@ -1774,24 +1775,24 @@ class BorderSim(QWidget):
             if s_cur not in k.getTrespassed():
                 k.addTrespassed(s_cur)
             # s_cur.setFp(s_cur.getTFp() + 1)
-            if k.getMoveModel() != 0:
-                s = k.getSegmentFromPlan(self.curT)
-                k.setPos(k_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
-                         k_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
-                k.setCurLoc(s)
-                k.setPrevLoc(s_cur)
-                s.setTFp(0)
-                s.setLastTrespassedBy(k)
-            else:
-                surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
-                d_random = np.random.choice(surroundings)
-                s_random = d_random["obj"]
-                k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
-                         k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
-                k.setCurLoc(s_random)
-                k.setPrevLoc(s_cur)
-                s_random.setTFp(0)
-                s_random.setLastTrespassedBy(k)
+            # if k.getMoveModel() != 0:
+            s = k.getSegmentFromPlan(self.curT)
+            k.setPos(k_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
+                     k_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
+            k.setCurLoc(s)
+            k.setPrevLoc(s_cur)
+            s.setTFp(0)
+            s.setLastTrespassedBy(k)
+            # else:
+            #     surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+            #     d_random = np.random.choice(surroundings)
+            #     s_random = d_random["obj"]
+            #     k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+            #              k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+            #     k.setCurLoc(s_random)
+            #     k.setPrevLoc(s_cur)
+            #     s_random.setTFp(0)
+            #     s_random.setLastTrespassedBy(k)
 
         elif k.getCurLoc().getCol() == self.number_col and k.getStatus() == 1:
             s_cur = k.getCurLoc()
@@ -2103,18 +2104,18 @@ class BorderSim(QWidget):
             # print(vertex)
             v_i = vertex.get_i()
             v_j = vertex.get_j()
-            v_1 = self.findSegment(v_i - 1, v_j - 1)
+            # v_1 = self.findSegment(v_i - 1, v_j - 1)
             v_2 = self.findSegment(v_i - 1, v_j)
             v_3 = self.findSegment(v_i - 1, v_j + 1)
             v_4 = self.findSegment(v_i, v_j + 1)
             v_5 = self.findSegment(v_i + 1, v_j + 1)
             v_6 = self.findSegment(v_i + 1, v_j)
-            v_7 = self.findSegment(v_i + 1, v_j - 1)
-            v_8 = self.findSegment(v_i, v_j - 1)
-            if (v_i - 1 >= 1 and v_j - 1 >= 1) and v_1["obj"].getTd() < 1:
-                next_vertex = g.get_vertex(str(v_i - 1) + ',' + str(v_j - 1))
-                cost = 0
-                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            # v_7 = self.findSegment(v_i + 1, v_j - 1)
+            # v_8 = self.findSegment(v_i, v_j - 1)
+            # if (v_i - 1 >= 1 and v_j - 1 >= 1) and v_1["obj"].getTd() < 1:
+            #     next_vertex = g.get_vertex(str(v_i - 1) + ',' + str(v_j - 1))
+            #     cost = 0
+            #     g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
             if (v_i - 1 >= 1) and v_2["obj"].getTd() < 1:
                 next_vertex = g.get_vertex(str(v_i - 1) + ',' + str(v_j))
                 cost = 0
@@ -2135,46 +2136,59 @@ class BorderSim(QWidget):
                 next_vertex = g.get_vertex(str(v_i + 1) + ',' + str(v_j))
                 cost = 0
                 g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
-            if (v_i + 1 <= self.number_row and v_j - 1 >= 1) and v_7["obj"].getTd() < 1:
-                next_vertex = g.get_vertex(str(v_i + 1) + ',' + str(v_j - 1))
-                cost = 0
-                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
-            if (v_j - 1 >= 1) and v_8["obj"].getTd() < 1:
-                next_vertex = g.get_vertex(str(v_i) + ',' + str(v_j - 1))
-                cost = 0
-                g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            # if (v_i + 1 <= self.number_row and v_j - 1 >= 1) and v_7["obj"].getTd() < 1:
+            #     next_vertex = g.get_vertex(str(v_i + 1) + ',' + str(v_j - 1))
+            #     cost = 0
+            #     g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
+            # if (v_j - 1 >= 1) and v_8["obj"].getTd() < 1:
+            #     next_vertex = g.get_vertex(str(v_i) + ',' + str(v_j - 1))
+            #     cost = 0
+            #     g.add_edge(vertex.get_id(), next_vertex.get_id(), cost)
 
         path = []
         path_list = []
-        self.allPathUtil(g, en, ex, path, path_list)
+        self.findPathUtil(g, en, ex, visited, path, path_list)
 
+        # sel_path = path_list[0]
         sel_path = np.random.choice(path_list)
         print("select trespasser path for %s" % t.getId())
         print(sel_path)
         stage = t.getArrTime()
         for s in sel_path:
-            d = self.findSegment(s.get_i(), s.get_j())
-            t.addToPlan(stage, d["obj"])
+            t.addToPlan(stage, s)
             stage = stage + 1
 
 
 
 
-    def allPathUtil(self, g, u, d, visited, path, path_list):
-        u_key = u.getRow() + ',' + u.getCol()
+    def findPathUtil(self, g, u, d, visited, path, path_list):
+
+        if len(path_list) >= 3:
+            return
+
+        u_key = str(u.getRow()) + ',' + str(u.getCol())
         u_vertex = g.get_vertex(u_key)
         visited[u_key] = True
         path.append(u)
 
-        if u == d:
-            path_list.append(path)
+        if u == d or u.getCol() == self.number_col:
+            path_c = []
+            for e in path:
+                path_c.append(e)
+            path_list.append(path_c)
         else:
+            adj = []
             for v in u_vertex.adjacent:
-                if visited[v.get_id()] == False:
+                adj.append(v)
+            adj_ = sample(adj, len(adj))
+            for v in adj_:
+                if visited[v.get_id()] == False and v.get_j() >= u_vertex.get_j():
                     [i,j] = v.get_id().split(",")
-                    d = self.findSegment(int(i), int(j))
-                    s = d["obj"]
-                    self.allPathUtil(g, s, d, visited, path, path_list)
+                    s = self.findSegment(int(i), int(j))
+                    self.findPathUtil(g, s["obj"], d, visited, path, path_list)
+
+        path.pop()
+        visited[u_key] = False
 
     def findTrespasserPath(self, t, en, ex):
         # construct graph

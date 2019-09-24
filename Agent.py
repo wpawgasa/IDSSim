@@ -213,6 +213,9 @@ class TrespasserAgent(Agent):
         self.observing_confidence = np.random.random_sample()
         self.belief = []
 
+    def getId(self):
+        return self.id
+
     def getWTd(self):
         return self.w_td
 
