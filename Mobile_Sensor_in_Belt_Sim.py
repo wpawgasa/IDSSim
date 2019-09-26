@@ -1346,6 +1346,7 @@ class BorderSim(QWidget):
         expanded = []
         expanding = []
         nextexpand = []
+        parents = []
         row = 1
         col = 1
         first_segment = None
@@ -1356,19 +1357,28 @@ class BorderSim(QWidget):
                 break
 
         # first_segment = self.findSegment(row, col)
-        expanding.append(first_segment)
+        parents.append(first_segment)
         for p in range(self.num_patrol - 1):
+            red = np.random.randint(low=0,high=255)
+            green = np.random.randint(low=0, high=255)
+            blue = np.random.randint(low=0, high=255)
+            alpha = 150
             accu_L_p = 0
             bar_alpha_p = []
+            exp_node = np.random.choice(parents)
+            expanding.append(exp_node)
+            parents.remove(exp_node)
             while accu_L_p < avgL_per_zone:
                 for e in expanding:
                     if e in bar_alpha:
                         s_e = e["obj"]
                         s_e.setZone("patrol_" + str(p + 1))
+                        s_e.setBrush(QColor(red, green, blue, alpha))
                         accu_L_p = accu_L_p + s_e.getL()
                         bar_alpha_p.append(e)
-                    expanded.append(e)
-                    next_segments = self.findSurrounding(e["row"], e["col"])
+                        expanded.append(e)
+                        expanding.remove(e)
+                    next_segments = self.findFreeSurrounding(e["row"], e["col"])
                     for e0 in expanded:
                         if e0 in next_segments:
                             next_segments.remove(e0)
@@ -1383,10 +1393,25 @@ class BorderSim(QWidget):
                         # next_segments = [item for i, item in enumerate(next_segments) if i not in nextexpand]
                     nextexpand.extend(next_segments)
 
-                expanding = []
+                # expanding = []
                 expanding.extend(nextexpand)
                 nextexpand = []
-
+            parents.extend(expanding)
+            for node in parents:
+                if node["obj"].getRow() <= 11 and (node["obj"].getCol() % 5) == 1:
+                    for i in range(1, node["obj"].getRow()):
+                        d = self.findSegment(i, node["obj"].getCol())
+                        s = d["obj"]
+                        s.setZone("patrol_" + str(p + 1))
+                        s.setBrush(QColor(red, green, blue, alpha))
+                    parents.remove(node)
+                elif node["obj"].getRow() >= 91 and (node["obj"].getCol() % 5) == 1:
+                    for i in range(node["obj"].getRow()+1,101):
+                        d = self.findSegment(i, node["obj"].getCol())
+                        s = d["obj"]
+                        s.setZone("patrol_" + str(p + 1))
+                        s.setBrush(QColor(red, green, blue, alpha))
+                    parents.remove(node)
             d_p = np.random.choice(bar_alpha_p)
             s_p = d_p["obj"]
             patrolagent = PatrolAgent("patrol_" + str(p + 1), s_p,
@@ -1398,6 +1423,8 @@ class BorderSim(QWidget):
             for e1 in bar_alpha_p:
                 if e1 in bar_alpha:
                     bar_alpha.remove(e1)
+
+
 
         for e in bar_alpha:
             s_e = e["obj"]
@@ -1431,6 +1458,17 @@ class BorderSim(QWidget):
         return [d for d in self.segments if
                 (i - 1 <= d["row"] <= i + 1 and j - 1 <= d["col"] <= j + 1)
                 and d["obj"].getTd() < 1]
+
+    def findFreeSurrounding(self, i, j):
+        # return [d for d in self.segments if
+        #         ((d["row"] == i - 1 and d["col"] == j - 1) or (d["row"] == i - 1 and d["col"] == j)
+        #          or (d["row"] == i - 1 and d["col"] == j + 1) or (d["row"] == i and d["col"] == j + 1)
+        #          or (d["row"] == i + 1 and d["col"] == j + 1) or (d["row"] == i + 1 and d["col"] == j)
+        #          or (d["row"] == i + 1 and d["col"] == j - 1) or (d["row"] == i and d["col"] == j - 1))
+        #         and d["obj"].getTd() < 1]
+        return [d for d in self.segments if
+                (i - 1 <= d["row"] <= i + 1 and j - 1 <= d["col"] <= j + 1)
+                and d["obj"].getTd() < 1 and d["obj"].getZone() is None]
 
     def findUpDownSegments(self, i, j):
         return [d for d in self.segments if
@@ -1775,24 +1813,33 @@ class BorderSim(QWidget):
             if s_cur not in k.getTrespassed():
                 k.addTrespassed(s_cur)
             # s_cur.setFp(s_cur.getTFp() + 1)
-            # if k.getMoveModel() != 0:
-            s = k.getSegmentFromPlan(self.curT)
-            k.setPos(k_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
-                     k_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
-            k.setCurLoc(s)
-            k.setPrevLoc(s_cur)
-            s.setTFp(0)
-            s.setLastTrespassedBy(k)
-            # else:
-            #     surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
-            #     d_random = np.random.choice(surroundings)
-            #     s_random = d_random["obj"]
-            #     k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
-            #              k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
-            #     k.setCurLoc(s_random)
-            #     k.setPrevLoc(s_cur)
-            #     s_random.setTFp(0)
-            #     s_random.setLastTrespassedBy(k)
+            if k.getMoveModel() != 0:
+                s = k.getSegmentFromPlan(self.curT)
+                k.setPos(k_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
+                         k_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
+                k.setCurLoc(s)
+                k.setPrevLoc(s_cur)
+                s.setTFp(0)
+                s.setLastTrespassedBy(k)
+            else:
+                surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
+                p_sur = []
+                for sur in surroundings:
+                    if sur["obj"].getCol() > s_cur.getCol():
+                        p_sur.append(0.5)
+                    elif sur["obj"].getCol() == s_cur.getCol():
+                        p_sur.append(0.25)
+                    else:
+                        p_sur.append(0.1)
+                p_sur_ = [p_/sum(p_sur) for p_ in p_sur]
+                d_random = np.random.choice(surroundings, p=p_sur_)
+                s_random = d_random["obj"]
+                k.setPos(k_point.x() + (s_random.getCol() - s_cur.getCol()) * self.grid_width,
+                         k_point.y() + (s_random.getRow() - s_cur.getRow()) * self.grid_width)
+                k.setCurLoc(s_random)
+                k.setPrevLoc(s_cur)
+                s_random.setTFp(0)
+                s_random.setLastTrespassedBy(k)
 
         elif k.getCurLoc().getCol() == self.number_col and k.getStatus() == 1:
             s_cur = k.getCurLoc()
@@ -1999,8 +2046,8 @@ class BorderSim(QWidget):
         trespasser.setMoveModel(mm)
         if mm != 0:
             self.findTrespasserPath(trespasser, s_en, s_ex)
-        else:
-            self.findRandomTrespassingPaths(trespasser, s_en, s_ex)
+        # else:
+        #     self.findRandomTrespassingPaths(trespasser, s_en, s_ex)
 
         return trespasser
 
