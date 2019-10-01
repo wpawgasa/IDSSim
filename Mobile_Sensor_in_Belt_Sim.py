@@ -1530,7 +1530,7 @@ class BorderSim(QWidget):
             nextexpand = []
             exp_node = np.random.choice(bar_alpha)
             expanding.append(exp_node)
-            while accu_L_p < avgL_per_zone*0.8:
+            while accu_L_p < avgL_per_zone*0.9:
                 if not expanding and accu_L_p > avgL_per_zone*0.5:
                     # exp_node = np.random.choice(bar_alpha)
                     # expanding.append(exp_node)
@@ -1554,7 +1554,7 @@ class BorderSim(QWidget):
                         expanded.append(e)
                         # endnodes.append(e)
                         # expanding.remove(e)
-                        if accu_L_p >= avgL_per_zone*0.8:
+                        if accu_L_p >= avgL_per_zone*0.9:
                             break
                         next_segments = self.findFreeSurrounding(e["row"], e["col"])
                         for e0 in expanded:
@@ -1715,7 +1715,7 @@ class BorderSim(QWidget):
         #          or (d["row"] == i + 1 and d["col"] == j - 1) or (d["row"] == i and d["col"] == j - 1))
         #         and d["obj"].getTd() < 1]
         return [d for d in self.segments if
-                (i - 1 <= d["row"] <= i + 1 and j - 1 <= d["col"] <= j + 1)
+                (i - 1 <= d["row"] <= i + 1 and j - 1 <= d["col"] <= j + 1) and 10 < d["row"] < 92
                 and d["obj"].getTd() < 1 and d["obj"].getZone() is None]
 
     def findUpDownSegments(self, i, j):
@@ -2168,6 +2168,7 @@ class BorderSim(QWidget):
                 if l.getInvestigatedEntity().isTarget:
                     self.accu_tres = self.accu_tres + 1
                     for s_tres in l.getInvestigatedEntity().getTrespassed():
+                        print("Update stat at %s" % s_tres.getId())
                         s_tres.setSt(s_tres.getSt() + 1)
                         s_tres.calScore(self.accu_tres)
                     # report trespasser found

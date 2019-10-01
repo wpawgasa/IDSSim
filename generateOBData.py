@@ -26,7 +26,7 @@ def generateOB(argv):
     for x in range(segments.shape[0]):
         for y in range(segments.shape[1]):
             if segments[x,y] < 1:
-                segments[x, y] = np.random.random_sample()
+                segments[x, y] = np.random.random_sample()*0.25
 
     np.savetxt(outputfile, segments, delimiter=",")
 

@@ -56,9 +56,9 @@ class PatrolAgent(Agent):
         self.setPen(QColor(0, 153, 255, 255))
         self.setBrush(QColor(0, 153, 255, 255))
         self.setToolTip(self.id)
-        self.w_td = np.random.random_sample()
-        self.w_ob = np.random.random_sample()
-        self.w_st = np.random.random_sample()
+        self.w_td = 0.5     # np.random.random_sample()
+        self.w_ob = 0.1    # np.random.random_sample()
+        self.w_st = 1   # np.random.random_sample()
         self.pl = []
         self.status = 0 # 0 not operate, 1 patrolling, 2 investigating
         self.isFoundTrespasser = False
@@ -202,9 +202,9 @@ class TrespasserAgent(Agent):
         self.setPen(QColor(237, 76, 62, 255))
         self.setBrush(QColor(237, 76, 62, 255))
         self.setToolTip(self.id)
-        self.w_td = np.random.random_sample()
-        self.w_ob = np.random.random_sample()
-        self.w_st = np.random.random_sample()
+        self.w_td = 0.5     # np.random.random_sample()
+        self.w_ob = 0.1     # np.random.random_sample()
+        self.w_st = 1       # np.random.random_sample()
         self.arr_time = arr_time
         self.entry_s = loc_en
         self.exit_s = loc_ex
