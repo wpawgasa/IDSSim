@@ -1530,7 +1530,7 @@ class BorderSim(QWidget):
             nextexpand = []
             exp_node = np.random.choice(bar_alpha)
             expanding.append(exp_node)
-            while accu_L_p < avgL_per_zone*0.9:
+            while accu_L_p < avgL_per_zone*0.8:
                 if not expanding and accu_L_p > avgL_per_zone*0.5:
                     # exp_node = np.random.choice(bar_alpha)
                     # expanding.append(exp_node)
@@ -1554,7 +1554,7 @@ class BorderSim(QWidget):
                         expanded.append(e)
                         # endnodes.append(e)
                         # expanding.remove(e)
-                        if accu_L_p >= avgL_per_zone*0.9:
+                        if accu_L_p >= avgL_per_zone*0.8:
                             break
                         next_segments = self.findFreeSurrounding(e["row"], e["col"])
                         for e0 in expanded:
