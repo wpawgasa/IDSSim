@@ -2181,6 +2181,10 @@ class BorderSim(QWidget):
                     item.setData(Qt.DisplayRole, self.number_t_detected)
                     self.result1Tbl.setItem(self.curP - 1, 3, item)
                     # l.isFoundTrespasser = True
+                else:
+                    self.trespasser_found = False
+                    founded_entity = l.getInvestigatedEntity()
+                    self.scene.removeItem(founded_entity)
                 # reset investigated entity to none
                 l.setInvestigatedEntity(None)
                 # determine patrol plan after exiting an investigation
@@ -2192,6 +2196,8 @@ class BorderSim(QWidget):
         else:
             l_point = l.pos()
             s_cur = l.getCurLoc()
+            if s_cur.getTd() >= 1.0:
+                print("invalid move")
             # if self.patrol_move_model != 0:
             s = l.getSegmentFromPlan(self.curT)
             l.setPos(l_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
@@ -2247,7 +2253,7 @@ class BorderSim(QWidget):
                 if detection_result == 1:
                     n.setStatus(2)
                     l.setStatus(2)
-                    l.setInvestigatedEntity(k)
+                    l.setInvestigatedEntity(n)
                     # delay plan for t_I stages
                     for t in range(self.investigation_time):
                         l.delayPlan(p_loc)
@@ -2319,11 +2325,11 @@ class BorderSim(QWidget):
         self.noises = []
         # Poisson number of arrivals in a period
         n = np.random.poisson(self.trespasser_arrival_rate * self.noise_rate / 100)
-        entries = [d for d in self.segments if d["col"] == 1 and d["obj"].getTd() < 1]
+        entries = [d for d in self.segments if d["obj"].getTd() < 1]
         # exits = [d for d in self.segments if d["col"] == self.number_col and d["obj"].getTd() < 1]
         # if n > 0:
         for i in range(n):
-            self.genOneNoise(i, entries)
+            self.noises.append(self.genOneNoise(i, entries))
             # with parallel_backend('threading', n_jobs=n):
             #     results = Parallel()(delayed(self.genOneNoise)(i, entries) for i in range(n))
             #     self.noises = results

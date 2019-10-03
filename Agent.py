@@ -268,7 +268,7 @@ class Noise(Agent):
         self.setPen(QColor(240, 130, 41, 255))
         self.setBrush(QColor(240, 130, 41, 255))
         self.setToolTip(self.id)
-        self.arr_time = 0
+        self.arr_time = arr_time
         self.isTarget = False
         self.status = 0  # 0 not arrive yet, 1 in region, 2 detected, 3 exit region
 
