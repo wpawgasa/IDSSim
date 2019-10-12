@@ -1580,12 +1580,12 @@ class BorderSim(QWidget):
             expanding = []
             endnodes = []
             for d in bar_alpha_p:
-                if ((1 < d["obj"].getRow() < 11) or (91 < d["obj"].getRow() < 100) or
+                if ((1 < d["obj"].getRow() < 6) or (96 < d["obj"].getRow() < 100) or
                         (1 < d["obj"].getCol() < 6) or (46 < d["obj"].getCol() < 50)):
                     d_ = self.findSurroundingInZone2("patrol_" + str(p + 1), d["obj"].getRow(), d["obj"].getCol())
                     if len(d_) <=1 or (d["obj"].getCol() == 5 and self.findSegment(d["obj"].getRow(), 4)["obj"].getZone() is None) or \
                             (d["obj"].getCol() == 47 and self.findSegment(d["obj"].getRow(), 48)["obj"].getZone() is None) or \
-                            (d["obj"].getRow() == 10 and self.findSegment(9, d["obj"].getCol())["obj"].getZone() is None) or \
+                            (d["obj"].getRow() == 5 and self.findSegment(4, d["obj"].getCol())["obj"].getZone() is None) or \
                             (d["obj"].getRow() == 92 and self.findSegment(93, d["obj"].getCol())["obj"].getZone() is None):
                         endnodes.append(d)
 
@@ -2089,9 +2089,9 @@ class BorderSim(QWidget):
                 p_sur = []
                 for sur in surroundings:
                     if sur["obj"].getCol() > s_cur.getCol():
-                        p_sur.append(0.5)
+                        p_sur.append(0.4)
                     elif sur["obj"].getCol() == s_cur.getCol():
-                        p_sur.append(0.25)
+                        p_sur.append(0.2)
                     else:
                         p_sur.append(0.1)
                 p_sur_ = [p_ / sum(p_sur) for p_ in p_sur]
