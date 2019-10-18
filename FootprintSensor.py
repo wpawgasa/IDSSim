@@ -1,15 +1,19 @@
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
+import numpy as np
+
 class FootprintSensor(QGraphicsEllipseItem):
-    def __init__(self, loc, type, host, x, y, w, h, parent=None):
+    def __init__(self, loc, host, x, y, w, h, parent=None):
         super(FootprintSensor, self).__init__(x, y, w, h, parent)
+        self.setPen(QColor(105, 245, 120, 255))
+        self.setBrush(QColor(105, 245, 120, 255))
         self.curLoc = loc
-        # source type
-        # - 0 equipped on host
-        # - 1 remote sensor
-        self.type = type
         # a border patrol who can directly observe from this sensor
         self.host = host
-        # confidence of the source measure probability that it will retrieve fp value correctly
-        # sensor coefficient
-        # confidence is computed from sensor coef and obscurity in segment
-        # range of fp value that can be sensed
+        self.lastDetectedFP = None
+        self.curDetectedFP = None
+
+
+    def setLoc(self, loc):
+        self.curLoc = loc

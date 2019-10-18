@@ -6,11 +6,13 @@ from PyQt5.QtWidgets import *
 from GridCell import *
 from Agent import *
 from Path import *
+from FootprintSensor import *
 from functools import partial
 from dijkstra import Vertex, Graph, Dijkstra
 from joblib import Parallel, delayed, parallel_backend
 import pandas as pd
 from random import shuffle, sample
+import numpy as np
 
 sip.setapi('QString', 2)
 sip.setapi('QVariant', 2)
@@ -490,7 +492,7 @@ class BorderSim(QWidget):
         allowNoFP.setSingleStep(5)
         allowNoFP.setValue(10)
         allowNoFP.valueChanged.connect(self.setAllowNoFP)
-        patrollerLayout.addRow("Allowed # of stages for no footprint: ", allowNoFP)
+        patrollerLayout.addRow("Allowed # of stages for no reported footprint on each fp sensor: ", allowNoFP)
 
         MCTSSimRounds = QSpinBox()
         MCTSSimRounds.setRange(10, 1000)
@@ -523,12 +525,18 @@ class BorderSim(QWidget):
     def createFootprintSettingLayOut(self):
         layout = QVBoxLayout()
 
-        fpSensorGroupBox = QGroupBox("Footprint Sensor")
-        fpSensorLayOut = QFormLayout()
+        selffpSensorGroupBox = QGroupBox("Self Footprint Sensor")
+        selffpSensorLayOut = QFormLayout()
+        equipFPSensorBtn = QPushButton("Equip fp sensor to each border patrol")
+        equipFPSensorBtn.clicked.connect(self.equipFPSensor)
+        selffpSensorLayOut.addRow(equipFPSensorBtn)
+        stripoffFPSensorBtn = QPushButton("Strip off fp sensor from each border patrol")
+        stripoffFPSensorBtn.clicked.connect(self.stripoffFPSensor)
+        selffpSensorLayOut.addRow(stripoffFPSensorBtn)
 
-        fpSensorGroupBox.setLayout(fpSensorLayOut)
+        selffpSensorGroupBox.setLayout(selffpSensorLayOut)
 
-        layout.addWidget(fpSensorGroupBox)
+        layout.addWidget(selffpSensorGroupBox)
 
         return layout
 
@@ -569,6 +577,23 @@ class BorderSim(QWidget):
         layout.addWidget(result1GroupBox)
 
         return layout
+
+    def equipFPSensor(self):
+        for p in self.patrols:
+            fp_sensor = FootprintSensor(p.getCurLoc(), p.getId(),
+                                        self.pos_x + (int(p.getCurLoc().getCol()) - 1) * self.grid_width + self.grid_width*0.25,
+                                        self.pos_y + (int(p.getCurLoc().getRow()) - 1) * self.grid_width + self.grid_width*0.25,
+                                        self.grid_width*0.5, self.grid_width*0.5
+                                        )
+            p.setFPSensor(fp_sensor)
+            self.scene.addItem(fp_sensor)
+
+    def stripoffFPSensor(self):
+        for p in self.patrols:
+            fp_sensor = p.getFPSensor()
+            self.scene.removeItem(fp_sensor)
+            p.setFPSensor(None)
+
 
     def setTrespasserArrivalRate(self, v):
         self.trespasser_arrival_rate = v
@@ -1234,6 +1259,8 @@ class BorderSim(QWidget):
     def placePatrols(self):
         if self.patrols:
             for p in self.patrols:
+                if p.getFPSensor():
+                    self.scene.removeItem(p.getFPSensor())
                 self.scene.removeItem(p)
             self.patrols = []
         print("Number of patrols %i" % self.num_patrol)
@@ -1593,7 +1620,7 @@ class BorderSim(QWidget):
             # s_in_z = [d for d in self.segments if d["obj"].getZone() == "patrol_" + str(p + 1)]
             # no_neighbor_nodes = [n for n in s_in_z if not self.findSurroundingInZone2("patrol_" + str(p + 1), n["obj"].getRow(), n["obj"].getCol())]
             for node in endnodes:
-                if node["obj"].getRow() < 11 and (node["obj"].getCol() % 5) == 1:
+                if node["obj"].getRow() < 6 and (node["obj"].getCol() % 5) == 1:
                     for i in range(1, node["obj"].getRow()):
                         d = self.findSegment(i, node["obj"].getCol())
                         s = d["obj"]
@@ -1602,7 +1629,7 @@ class BorderSim(QWidget):
                         bar_alpha.remove(d)
                         s.setBrush(QColor(red, green, blue, alpha))
                     # endnodes.remove(node)
-                elif node["obj"].getRow() > 91 and (node["obj"].getCol() % 5) == 1:
+                elif node["obj"].getRow() > 96 and (node["obj"].getCol() % 5) == 1:
                     for i in range(node["obj"].getRow() + 1, 101):
                         d = self.findSegment(i, node["obj"].getCol())
                         s = d["obj"]
@@ -1611,7 +1638,7 @@ class BorderSim(QWidget):
                         bar_alpha.remove(d)
                         s.setBrush(QColor(red, green, blue, alpha))
                     # endnodes.remove(node)
-                elif node["obj"].getCol() < 6 and (node["obj"].getRow() % 10) == 1:
+                elif node["obj"].getCol() < 6 and (node["obj"].getRow() % 5) == 1:
                     for i in range(1, node["obj"].getCol()):
                         d = self.findSegment(node["obj"].getRow(), i)
                         s = d["obj"]
@@ -1620,7 +1647,7 @@ class BorderSim(QWidget):
                         bar_alpha.remove(d)
                         s.setBrush(QColor(red, green, blue, alpha))
                     # endnodes.remove(node)
-                elif node["obj"].getCol() > 46 and (node["obj"].getRow() % 10) == 1:
+                elif node["obj"].getCol() > 46 and (node["obj"].getRow() % 5) == 1:
                     for i in range(node["obj"].getCol() + 1, 51):
                         d = self.findSegment(node["obj"].getRow(), i)
                         s = d["obj"]
@@ -1957,19 +1984,19 @@ class BorderSim(QWidget):
         # with parallel_backend('threading', n_jobs=self.num_patrol):
         #     Parallel()(delayed(self.detectionProcess)(i) for i in self.patrols)
 
-        if self.trespasser_move_model == 2:
-            for k in self.trespassers:
-                if (not np.isinf(k.getCurLoc().getPFp())) and k.getStatus() == 1:
-                    # take the footprint with the prob equal to observing confidence
-                    fp_d = np.random.choice([0, 1], p=[1 - k.getObservingConfidence(), k.getObservingConfidence()])
-                    if fp_d == 1:
-                        # construct belief
-                        d_b = self.findSegmentsInCoverage(k.getCurLoc().getRow(), k.getCurLoc().getCol(),
-                                                          k.getCurLoc().getPFp())
-                        k.resetBelief()
-                        for dd_b in d_b:
-                            k.addToBelief(dd_b["obj"])
-                        self.findTrespasserPathWithFP(k, k.getCurLoc(), k.getDestination())
+        # if self.trespasser_move_model == 2:
+        #     for k in self.trespassers:
+        #         if (not np.isinf(k.getCurLoc().getPFp())) and k.getStatus() == 1:
+        #             # take the footprint with the prob equal to observing confidence
+        #             fp_d = np.random.choice([0, 1], p=[1 - k.getObservingConfidence(), k.getObservingConfidence()])
+        #             if fp_d == 1:
+        #                 # construct belief
+        #                 d_b = self.findSegmentsInCoverage(k.getCurLoc().getRow(), k.getCurLoc().getCol(),
+        #                                                   k.getCurLoc().getPFp())
+        #                 k.resetBelief()
+        #                 for dd_b in d_b:
+        #                     k.addToBelief(dd_b["obj"])
+        #                 self.findTrespasserPathWithFP(k, k.getCurLoc(), k.getDestination())
 
         if self.patrol_move_model == 4:
             # collect footprints
@@ -2089,7 +2116,7 @@ class BorderSim(QWidget):
                 p_sur = []
                 for sur in surroundings:
                     if sur["obj"].getCol() > s_cur.getCol():
-                        p_sur.append(0.4)
+                        p_sur.append(0.3)
                     elif sur["obj"].getCol() == s_cur.getCol():
                         p_sur.append(0.2)
                     else:
@@ -2149,6 +2176,9 @@ class BorderSim(QWidget):
             s_cur.setLastPatrolledAt(self.curT)
             # l.setPos(0, 0)
             l.setStatus(1)
+            ss = l.getFPSensor()
+            if ss:
+                ss.setLoc(s_cur)
             # self.detectionProcess(l)
         elif self.curT >= 1 and l.getStatus() == 2:
             s = l.getSegmentFromPlan(self.curT)
@@ -2157,6 +2187,9 @@ class BorderSim(QWidget):
             s.setPFp(0)
             s.setLastPatrolledBy(l)
             s.setLastPatrolledAt(self.curT)
+            ss = l.getFPSensor()
+            if ss:
+                ss.setLoc(s)
             if l.getInvestigatingTime() < (self.investigation_time - 1):
                 print("***investigating****")
                 l.incrementInvestigatingTime()
@@ -2207,6 +2240,11 @@ class BorderSim(QWidget):
             s.setPFp(0)
             s.setLastPatrolledBy(l)
             s.setLastPatrolledAt(self.curT)
+            ss = l.getFPSensor()
+            if ss:
+                ss.setPos(l_point.x() + (s.getCol() - s_cur.getCol()) * self.grid_width,
+                          l_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
+                ss.setLoc(s)
             self.detectionProcess(l)
             # else:
             #     surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
@@ -2293,10 +2331,17 @@ class BorderSim(QWidget):
         # with parallel_backend('threading', n_jobs=n):
         #     results = Parallel()(delayed(self.genOneTrespasser)(i, entries, exits) for i in range(n))
         #     self.trespassers = results
-        for i in range(n):
-            self.trespassers.append(self.genOneTrespasser(i, entries, exits))
+        num_m0 = int(np.ceil(self.trespasser_move_model[0] * n))
+        num_m1 = int(np.ceil(self.trespasser_move_model[1] * n))
+        num_m2 = int(np.ceil(self.trespasser_move_model[2] * n))
+        for i in range(num_m0):
+            self.trespassers.append(self.genOneTrespasser(i, entries, exits, 0))
+        for i in range(num_m0, num_m0+num_m1):
+            self.trespassers.append(self.genOneTrespasser(i, entries, exits, 1))
+        for i in range(num_m0+num_m1, num_m0+num_m1+num_m2):
+            self.trespassers.append(self.genOneTrespasser(i, entries, exits, 2))
 
-    def genOneTrespasser(self, i, entries, exits):
+    def genOneTrespasser(self, i, entries, exits, mm):
         # trespasser's poisson arrival time
         arr_time = np.floor(np.random.uniform(1, self.period_len))
         # random select entry segment
@@ -2309,7 +2354,7 @@ class BorderSim(QWidget):
                                      self.pos_x + (int(s_en.getCol() - 1) * self.grid_width),
                                      self.pos_y + (int(s_en.getRow()) - 1) * self.grid_width,
                                      self.grid_width, self.grid_width)
-        mm = np.random.choice([0, 1, 2], p=self.trespasser_move_model)
+        # mm = np.random.choice([0, 1, 2], p=self.trespasser_move_model)
         trespasser.setMoveModel(mm)
         if mm != 0:
             self.findTrespasserPath(trespasser, s_en, s_ex)

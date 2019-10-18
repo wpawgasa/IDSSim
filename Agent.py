@@ -75,6 +75,7 @@ class PatrolAgent(Agent):
         self.recorded_segs = [] # individual recorded segments info
         self.recorded_stat = 0
         self.replan_stage = 0
+        self.fp_sensor = None
 
     def getId(self):
         return self.id
@@ -190,6 +191,12 @@ class PatrolAgent(Agent):
             return value[0]
         else:
             return None
+        
+    def setFPSensor(self, ss):
+        self.fp_sensor = ss
+        
+    def getFPSensor(self):
+        return self.fp_sensor
 
 
 
