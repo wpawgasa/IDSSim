@@ -1613,7 +1613,7 @@ class BorderSim(QWidget):
                     if len(d_) <=1 or (d["obj"].getCol() == 5 and self.findSegment(d["obj"].getRow(), 4)["obj"].getZone() is None) or \
                             (d["obj"].getCol() == 47 and self.findSegment(d["obj"].getRow(), 48)["obj"].getZone() is None) or \
                             (d["obj"].getRow() == 5 and self.findSegment(4, d["obj"].getCol())["obj"].getZone() is None) or \
-                            (d["obj"].getRow() == 92 and self.findSegment(93, d["obj"].getCol())["obj"].getZone() is None):
+                            (d["obj"].getRow() == 97 and self.findSegment(98, d["obj"].getCol())["obj"].getZone() is None):
                         endnodes.append(d)
 
 
@@ -1742,7 +1742,7 @@ class BorderSim(QWidget):
         #          or (d["row"] == i + 1 and d["col"] == j - 1) or (d["row"] == i and d["col"] == j - 1))
         #         and d["obj"].getTd() < 1]
         return [d for d in self.segments if
-                (i - 1 <= d["row"] <= i + 1 and j - 1 <= d["col"] <= j + 1) and 10 < d["row"] < 92
+                (i - 1 <= d["row"] <= i + 1 and j - 1 <= d["col"] <= j + 1) and 5 < d["row"] < 97
                 and d["obj"].getTd() < 1 and d["obj"].getZone() is None]
 
     def findUpDownSegments(self, i, j):
