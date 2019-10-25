@@ -66,6 +66,7 @@ class BorderSim(QWidget):
         self.result1_df = pd.DataFrame(columns=['entering', 'leaving', 'detected', 'detection_rate'])
 
         self.zoning = False
+        self.zoning_scale = 0.8
 
         self.pos_x = 10
         self.pos_y = 35
@@ -517,6 +518,14 @@ class BorderSim(QWidget):
         placePatroller.clicked.connect(self.placePatrols)
         patrollerLayout.addRow(placePatroller)
 
+        zoningScale = QDoubleSpinBox()
+        zoningScale.setRange(0.0, 1.0)
+        zoningScale.setSingleStep(0.1)
+        zoningScale.setDecimals(1)
+        zoningScale.setValue(0.8)
+        zoningScale.valueChanged.connect(self.setZoningScale)
+        patrollerLayout.addRow("Zoning Scale: ", zoningScale)
+
         patrollerGroupBox.setLayout(patrollerLayout)
 
         layout.addWidget(patrollerGroupBox)
@@ -594,6 +603,8 @@ class BorderSim(QWidget):
             self.scene.removeItem(fp_sensor)
             p.setFPSensor(None)
 
+    def setZoningScale(self, v):
+        self.zoning_scale = v
 
     def setTrespasserArrivalRate(self, v):
         self.trespasser_arrival_rate = v
@@ -1557,8 +1568,8 @@ class BorderSim(QWidget):
             nextexpand = []
             exp_node = np.random.choice(bar_alpha)
             expanding.append(exp_node)
-            while accu_L_p < avgL_per_zone*0.8:
-                if not expanding and accu_L_p > avgL_per_zone*0.5:
+            while accu_L_p < avgL_per_zone*self.zoning_scale:
+                if not expanding and accu_L_p > avgL_per_zone*self.zoning_scale*0.8:
                     # exp_node = np.random.choice(bar_alpha)
                     # expanding.append(exp_node)
                     break
