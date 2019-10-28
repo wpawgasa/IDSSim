@@ -1630,43 +1630,43 @@ class BorderSim(QWidget):
 
             # s_in_z = [d for d in self.segments if d["obj"].getZone() == "patrol_" + str(p + 1)]
             # no_neighbor_nodes = [n for n in s_in_z if not self.findSurroundingInZone2("patrol_" + str(p + 1), n["obj"].getRow(), n["obj"].getCol())]
-            for node in endnodes:
-                if node["obj"].getRow() < 6 and (node["obj"].getCol() % 5) == 1:
-                    for i in range(1, node["obj"].getRow()):
-                        d = self.findSegment(i, node["obj"].getCol())
-                        s = d["obj"]
-                        s.setZone("patrol_" + str(p + 1))
-                        bar_alpha_p.append(d)
-                        bar_alpha.remove(d)
-                        s.setBrush(QColor(red, green, blue, alpha))
-                    # endnodes.remove(node)
-                elif node["obj"].getRow() > 96 and (node["obj"].getCol() % 5) == 1:
-                    for i in range(node["obj"].getRow() + 1, 101):
-                        d = self.findSegment(i, node["obj"].getCol())
-                        s = d["obj"]
-                        s.setZone("patrol_" + str(p + 1))
-                        bar_alpha_p.append(d)
-                        bar_alpha.remove(d)
-                        s.setBrush(QColor(red, green, blue, alpha))
-                    # endnodes.remove(node)
-                elif node["obj"].getCol() < 6 and (node["obj"].getRow() % 5) == 1:
-                    for i in range(1, node["obj"].getCol()):
-                        d = self.findSegment(node["obj"].getRow(), i)
-                        s = d["obj"]
-                        s.setZone("patrol_" + str(p + 1))
-                        bar_alpha_p.append(d)
-                        bar_alpha.remove(d)
-                        s.setBrush(QColor(red, green, blue, alpha))
-                    # endnodes.remove(node)
-                elif node["obj"].getCol() > 46 and (node["obj"].getRow() % 5) == 1:
-                    for i in range(node["obj"].getCol() + 1, 51):
-                        d = self.findSegment(node["obj"].getRow(), i)
-                        s = d["obj"]
-                        s.setZone("patrol_" + str(p + 1))
-                        bar_alpha_p.append(d)
-                        bar_alpha.remove(d)
-                        s.setBrush(QColor(red, green, blue, alpha))
-                    # endnodes.remove(node)
+            # for node in endnodes:
+            #     if node["obj"].getRow() < 6 and (node["obj"].getCol() % 5) == 1:
+            #         for i in range(1, node["obj"].getRow()):
+            #             d = self.findSegment(i, node["obj"].getCol())
+            #             s = d["obj"]
+            #             s.setZone("patrol_" + str(p + 1))
+            #             bar_alpha_p.append(d)
+            #             bar_alpha.remove(d)
+            #             s.setBrush(QColor(red, green, blue, alpha))
+            #         # endnodes.remove(node)
+            #     elif node["obj"].getRow() > 96 and (node["obj"].getCol() % 5) == 1:
+            #         for i in range(node["obj"].getRow() + 1, 101):
+            #             d = self.findSegment(i, node["obj"].getCol())
+            #             s = d["obj"]
+            #             s.setZone("patrol_" + str(p + 1))
+            #             bar_alpha_p.append(d)
+            #             bar_alpha.remove(d)
+            #             s.setBrush(QColor(red, green, blue, alpha))
+            #         # endnodes.remove(node)
+            #     elif node["obj"].getCol() < 6 and (node["obj"].getRow() % 5) == 1:
+            #         for i in range(1, node["obj"].getCol()):
+            #             d = self.findSegment(node["obj"].getRow(), i)
+            #             s = d["obj"]
+            #             s.setZone("patrol_" + str(p + 1))
+            #             bar_alpha_p.append(d)
+            #             bar_alpha.remove(d)
+            #             s.setBrush(QColor(red, green, blue, alpha))
+            #         # endnodes.remove(node)
+            #     elif node["obj"].getCol() > 46 and (node["obj"].getRow() % 5) == 1:
+            #         for i in range(node["obj"].getCol() + 1, 51):
+            #             d = self.findSegment(node["obj"].getRow(), i)
+            #             s = d["obj"]
+            #             s.setZone("patrol_" + str(p + 1))
+            #             bar_alpha_p.append(d)
+            #             bar_alpha.remove(d)
+            #             s.setBrush(QColor(red, green, blue, alpha))
+            #         # endnodes.remove(node)
             #     elif g_:
             #         for g in g_:
             #             if g["obj"].getCol() > node["obj"].getCol():
@@ -1752,6 +1752,15 @@ class BorderSim(QWidget):
         #          or (d["row"] == i + 1 and d["col"] == j + 1) or (d["row"] == i + 1 and d["col"] == j)
         #          or (d["row"] == i + 1 and d["col"] == j - 1) or (d["row"] == i and d["col"] == j - 1))
         #         and d["obj"].getTd() < 1]
+        if j < np.round(self.number_col*0.2):
+            return [d for d in self.segments if
+                    (i - 1 <= d["row"] <= i + 1 and j - 1 <= d["col"] <= j) and 5 < d["row"] < 97
+                    and d["obj"].getTd() < 1 and d["obj"].getZone() is None]
+        elif j > np.round(self.number_col*0.8):
+            return [d for d in self.segments if
+                    (i - 1 <= d["row"] <= i + 1 and j <= d["col"] <= j + 1) and 5 < d["row"] < 97
+                    and d["obj"].getTd() < 1 and d["obj"].getZone() is None]
+
         return [d for d in self.segments if
                 (i - 1 <= d["row"] <= i + 1 and j - 1 <= d["col"] <= j + 1) and 5 < d["row"] < 97
                 and d["obj"].getTd() < 1 and d["obj"].getZone() is None]
