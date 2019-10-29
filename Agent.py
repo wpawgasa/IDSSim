@@ -219,6 +219,7 @@ class TrespasserAgent(Agent):
         self.trespassed = []
         self.observing_confidence = np.random.random_sample()
         self.belief = []
+        self.fp_sensor = None
 
     def getId(self):
         return self.id
@@ -267,6 +268,12 @@ class TrespasserAgent(Agent):
 
     def getMoveModel(self):
         return self.move_model
+
+    def setFPSensor(self, ss):
+        self.fp_sensor = ss
+
+    def getFPSensor(self):
+        return self.fp_sensor
 
 class Noise(Agent):
     def __init__(self, id, loc_en, arr_time, x, y, w, h, parent=None):

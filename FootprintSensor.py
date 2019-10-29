@@ -11,9 +11,21 @@ class FootprintSensor(QGraphicsEllipseItem):
         self.curLoc = loc
         # a border patrol who can directly observe from this sensor
         self.host = host
-        self.lastDetectedFP = None
-        self.curDetectedFP = None
+        # self.lastDetectedFP = None
+        self.curMeasuredFP = None
 
 
     def setLoc(self, loc):
         self.curLoc = loc
+
+    def measureTFp(self, t):
+        if self.curLoc.getTFp():
+            return t, self.curLoc, self.curLoc.getTFp(), np.random.random_sample()
+        else:
+            return None
+
+    def measurePFp(self, t):
+        if self.curLoc.getPFp():
+            return t, self.curLoc, self.curLoc.getPFp(), np.random.random_sample()
+        else:
+            return None

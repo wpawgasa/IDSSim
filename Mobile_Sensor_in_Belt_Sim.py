@@ -64,6 +64,7 @@ class BorderSim(QWidget):
         self.avg_detection_rate = 0
         self.detection_rate_per_round = []
         self.result1_df = pd.DataFrame(columns=['entering', 'leaving', 'detected', 'detection_rate'])
+        self.ratio_fp_sensor = 0.05
 
         self.zoning = False
         self.zoning_scale = 0.8
@@ -545,6 +546,20 @@ class BorderSim(QWidget):
 
         selffpSensorGroupBox.setLayout(selffpSensorLayOut)
 
+        remotefpSensorGroupBox = QGroupBox("Remote Footprint Sensor")
+        remotefpSensorLayOut = QFormLayout()
+        ratioFPSensor = QSpinBox()
+        ratioFPSensor.setRange(0, 100)
+        ratioFPSensor.setSingleStep(5)
+        ratioFPSensor.setValue(5)
+        ratioFPSensor.valueChanged.connect(self.setRatioFPSensor)
+
+        placeFPSensorBtn = QPushButton("Place fp sensor")
+        placeFPSensorBtn.clicked.connect(self.placeFPSensor)
+        remotefpSensorLayOut.addRow(placeFPSensorBtn)
+
+        remotefpSensorGroupBox.setLayout(remotefpSensorLayOut)
+
         layout.addWidget(selffpSensorGroupBox)
 
         return layout
@@ -602,6 +617,9 @@ class BorderSim(QWidget):
             fp_sensor = p.getFPSensor()
             self.scene.removeItem(fp_sensor)
             p.setFPSensor(None)
+
+    def setRatioFPSensor(self, v):
+        self.ratio_fp_sensor = v/100
 
     def setZoningScale(self, v):
         self.zoning_scale = v
@@ -1266,6 +1284,32 @@ class BorderSim(QWidget):
             return True
         else:
             return False
+
+    def placeFPSensor(self):
+        passable = []
+        for d in self.segments:
+            if d['obj'].getTd() < 1:
+                passable.append(d)
+
+        num_fp = np.ceil(len(passable)*self.ratio_fp_sensor)
+        fp_loc = []
+        for fp in range(int(num_fp)):
+            loc = None
+            while loc not in fp_loc:
+                loc = np.random.choice(passable)
+
+            fp_loc.append(loc)
+            zone_id = loc['obj'].getZone()
+            new_fp_sensor = FootprintSensor(loc['obj'], zone_id,
+                                        self.pos_x + (int(loc['obj'].getCol()) - 1) * self.grid_width + self.grid_width*0.25,
+                                        self.pos_y + (int(loc['obj'].getRow()) - 1) * self.grid_width + self.grid_width*0.25,
+                                        self.grid_width*0.5, self.grid_width*0.5
+                                        )
+
+            self.scene.addItem(new_fp_sensor)
+
+
+
 
     def placePatrols(self):
         if self.patrols:
@@ -2131,6 +2175,18 @@ class BorderSim(QWidget):
                 k.setPrevLoc(s_cur)
                 s.setTFp(0)
                 s.setLastTrespassedBy(k)
+                # measure footprint
+                if k.getMoveModel() == 2 and k.getFPSensor():
+                    # get sensor
+                    if k.getFPSensor().measurePFp(self.curT):
+                        t_f, loc_f, v_f, c_f = k.getFPSensor().measurePFp(self.curT)
+                        # determine distribution of footprint's owner
+                        d_b = self.findSegmentsInCoverage(k.getCurLoc().getRow(), k.getCurLoc().getCol(), v_f)
+                        k.resetBelief()
+                        for dd_b in d_b:
+                            k.addToBelief(dd_b["obj"])
+                        self.findTrespasserPathWithFP(k, k.getCurLoc(), k.getDestination())
+
             else:
                 surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
                 p_sur = []
@@ -2381,6 +2437,16 @@ class BorderSim(QWidget):
         # else:
         #     self.findRandomTrespassingPaths(trespasser, s_en, s_ex)
 
+        # equip fp sensor
+        if mm == 2:
+            fp_sensor = FootprintSensor(trespasser.getCurLoc(), trespasser.getId(),
+                                        self.pos_x + (int(
+                                            trespasser.getCurLoc().getCol()) - 1) * self.grid_width + self.grid_width * 0.25,
+                                        self.pos_y + (int(
+                                            trespasser.getCurLoc().getRow()) - 1) * self.grid_width + self.grid_width * 0.25,
+                                        self.grid_width * 0.5, self.grid_width * 0.5
+                                        )
+            trespasser.setFPSensor(fp_sensor)
         return trespasser
 
     def generateNoise(self):
