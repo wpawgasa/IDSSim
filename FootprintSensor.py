@@ -19,13 +19,13 @@ class FootprintSensor(QGraphicsEllipseItem):
         self.curLoc = loc
 
     def measureTFp(self, t):
-        if self.curLoc.getTFp():
+        if not np.isinf(self.curLoc.getTFp()):
             return t, self.curLoc, self.curLoc.getTFp(), np.random.random_sample()
         else:
             return None
 
     def measurePFp(self, t):
-        if self.curLoc.getPFp():
+        if not np.isinf(self.curLoc.getPFp()):
             return t, self.curLoc, self.curLoc.getPFp(), np.random.random_sample()
         else:
             return None

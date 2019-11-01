@@ -2213,6 +2213,9 @@ class BorderSim(QWidget):
                 k.addTrespassed(s_cur)
             k.setStatus(3)
             self.scene.removeItem(k)
+            for s_tp in k.getTrespassed():
+                if s_tp.getLastTrespassedBy() is k:
+                    s_tp.setTFp(np.inf)
             self.number_t_exit = self.number_t_exit + 1
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, self.number_t_exit)
