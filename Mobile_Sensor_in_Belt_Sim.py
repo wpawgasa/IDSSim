@@ -65,6 +65,7 @@ class BorderSim(QWidget):
         self.detection_rate_per_round = []
         self.result1_df = pd.DataFrame(columns=['entering', 'leaving', 'detected', 'detection_rate'])
         self.ratio_fp_sensor = 0.05
+        self.max_fp_value = 5
 
         self.zoning = False
         self.zoning_scale = 0.8
@@ -561,6 +562,18 @@ class BorderSim(QWidget):
         remotefpSensorGroupBox.setLayout(remotefpSensorLayOut)
 
         layout.addWidget(selffpSensorGroupBox)
+        layout.addWidget(remotefpSensorGroupBox)
+
+        fpSettingLayOut = QFormLayout()
+        maxFPval = QSpinBox()
+        maxFPval.setRange(0, 100)
+        maxFPval.setSingleStep(1)
+        maxFPval.setValue(5)
+        maxFPval.valueChanged.connect(self.setMaxFPVal)
+
+        fpSettingLayOut.addRow("Max. Acceptable FP value", maxFPval)
+
+        layout.addWidget(fpSettingLayOut)
 
         return layout
 
@@ -672,6 +685,9 @@ class BorderSim(QWidget):
             self.zoning = True
         else:
             self.zoning = False
+
+    def setMaxFPVal(self, v):
+        self.max_fp_value = v
 
     def exportResult(self):
         options = QFileDialog.Options()
@@ -2181,11 +2197,12 @@ class BorderSim(QWidget):
                     if k.getFPSensor().measurePFp(self.curT):
                         t_f, loc_f, v_f, c_f = k.getFPSensor().measurePFp(self.curT)
                         # determine distribution of footprint's owner
-                        d_b = self.findSegmentsInCoverage(k.getCurLoc().getRow(), k.getCurLoc().getCol(), v_f)
-                        k.resetBelief()
-                        for dd_b in d_b:
-                            k.addToBelief(dd_b["obj"])
-                        self.findTrespasserPathWithFP(k, k.getCurLoc(), k.getDestination())
+                        if v_f <= self.max_fp_value:
+                            d_b = self.findSegmentsInCoverage(k.getCurLoc().getRow(), k.getCurLoc().getCol(), v_f)
+                            k.resetBelief()
+                            for dd_b in d_b:
+                                k.addToBelief(dd_b["obj"])
+                            self.findTrespasserPathWithFP(k, k.getCurLoc(), k.getDestination())
 
             else:
                 surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
@@ -2325,6 +2342,7 @@ class BorderSim(QWidget):
                           l_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
                 ss.setLoc(s)
             self.detectionProcess(l)
+
             # else:
             #     surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
             #     d_random = np.random.choice(surroundings, 1)
@@ -2375,6 +2393,10 @@ class BorderSim(QWidget):
                     for t in range(self.investigation_time):
                         l.delayPlan(p_loc)
                         l.setReplanStage(l.getReplanStage() + 1)
+
+    def observationProcess(self, l):
+        p_loc = l.getCurLoc()
+        p_prev = l.getPrevLoc()
 
     def rePlanningProcess(self, l):
         if l.getReplanStage() == self.curT and l.getStatus() == 1:

@@ -5,3 +5,5 @@ class ObservedFootprint:
         self.loc = loc
         self.value = value
         self.confidence = confidence
+        self.Lambda = []
+        self.b = {}
