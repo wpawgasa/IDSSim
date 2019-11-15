@@ -2342,6 +2342,11 @@ class BorderSim(QWidget):
                           l_point.y() + (s.getRow() - s_cur.getRow()) * self.grid_width)
                 ss.setLoc(s)
             self.detectionProcess(l)
+            if l.getStatus() == 1 and self.patrol_move_model == 2:
+                # observe and filter footprints
+                self.observationProcess()
+                # online planning
+
 
             # else:
             #     surroundings = self.findSurrounding(s_cur.getRow(), s_cur.getCol())
@@ -2396,7 +2401,9 @@ class BorderSim(QWidget):
 
     def observationProcess(self, l):
         p_loc = l.getCurLoc()
-        p_prev = l.getPrevLoc()
+        # get footprint on current location
+
+        # get footprint from remote in zone
 
     def rePlanningProcess(self, l):
         if l.getReplanStage() == self.curT and l.getStatus() == 1:

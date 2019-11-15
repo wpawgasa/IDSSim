@@ -29,3 +29,6 @@ class FootprintSensor(QGraphicsEllipseItem):
             return t, self.curLoc, self.curLoc.getPFp(), np.random.random_sample()
         else:
             return None
+
+    def getHost(self):
+        return self.host

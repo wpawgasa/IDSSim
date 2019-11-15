@@ -65,15 +65,14 @@ class PatrolAgent(Agent):
         self.investigating_time = 0
         self.found_trespasser = {}
         self.investigated_entity = None
-        self.observing_confidence = np.random.random_sample()
+        # self.observing_confidence = np.random.random_sample()
         self.pomdp_active = False
-        self.observation_history = {} # record all observations
-        self.active_history = [] # record observation during POMDP
-        self.belief = [] # initial belief of real observation
-        self.T = {} # search tree
-        self.explored_h = [] # explored history
-        self.recorded_segs = [] # individual recorded segments info
-        self.recorded_stat = 0
+        self.footprints = {}  # record all collected footprints
+        self.belief = []  # belief at time t
+        self.T = {}  # search tree
+        self.explored_h = []  # explored history
+        self.recorded_segs = []  # individual recorded segments that trespassed by detected trespasser
+        self.recorded_stat = 0  # updated trespasser statistic
         self.replan_stage = 0
         self.fp_sensor = None
 
