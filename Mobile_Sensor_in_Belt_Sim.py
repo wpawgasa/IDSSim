@@ -564,6 +564,8 @@ class BorderSim(QWidget):
         layout.addWidget(selffpSensorGroupBox)
         layout.addWidget(remotefpSensorGroupBox)
 
+        fpSettingGroupBox = QGroupBox("Observable Footprint Setting")
+
         fpSettingLayOut = QFormLayout()
         maxFPval = QSpinBox()
         maxFPval.setRange(0, 100)
@@ -572,8 +574,9 @@ class BorderSim(QWidget):
         maxFPval.valueChanged.connect(self.setMaxFPVal)
 
         fpSettingLayOut.addRow("Max. Acceptable FP value", maxFPval)
+        fpSettingGroupBox.setLayout(fpSettingLayOut)
 
-        layout.addWidget(fpSettingLayOut)
+        layout.addWidget(fpSettingGroupBox)
 
         return layout
 
@@ -2078,83 +2081,83 @@ class BorderSim(QWidget):
         #                     k.addToBelief(dd_b["obj"])
         #                 self.findTrespasserPathWithFP(k, k.getCurLoc(), k.getDestination())
 
-        if self.patrol_move_model == 4:
-            # collect footprints
-            for l in self.patrols:
-                if not np.isinf(l.getCurLoc().getTFp()):
-                    l.addObservation(self.curT, l.getId(),
-                                     (l.getCurLoc().getRow(), l.getCurLoc().getCol(), l.getCurLoc().getTFp()))
-                else:
-                    l.addObservation(self.curT, l.getId(), None)
-                for m in [n for n in self.patrols if n != l]:
-                    comm_result = np.random.choice([0, 1], p=[1 - self.comm_success_rate, self.comm_success_rate])
-                    confd = np.random.choice([0, 1], p=[1 - m.getObservingConfidence(), m.getObservingConfidence()])
-                    if not np.isinf(m.getCurLoc().getTFp()) and comm_result == 1 and confd == 1:
-                        l.addObservation(self.curT, m.getId(),
-                                         (m.getCurLoc().getRow(), m.getCurLoc().getCol(), m.getCurLoc().getTFp()))
-                    else:
-                        l.addObservation(self.curT, m.getId(), None)
+        # if self.patrol_move_model == 4:
+        #     # collect footprints
+        #     for l in self.patrols:
+        #         if not np.isinf(l.getCurLoc().getTFp()):
+        #             l.addObservation(self.curT, l.getId(),
+        #                              (l.getCurLoc().getRow(), l.getCurLoc().getCol(), l.getCurLoc().getTFp()))
+        #         else:
+        #             l.addObservation(self.curT, l.getId(), None)
+        #         for m in [n for n in self.patrols if n != l]:
+        #             comm_result = np.random.choice([0, 1], p=[1 - self.comm_success_rate, self.comm_success_rate])
+        #             confd = np.random.choice([0, 1], p=[1 - m.getObservingConfidence(), m.getObservingConfidence()])
+        #             if not np.isinf(m.getCurLoc().getTFp()) and comm_result == 1 and confd == 1:
+        #                 l.addObservation(self.curT, m.getId(),
+        #                                  (m.getCurLoc().getRow(), m.getCurLoc().getCol(), m.getCurLoc().getTFp()))
+        #             else:
+        #                 l.addObservation(self.curT, m.getId(), None)
+        #
+        #     # utilize observed footprints
+        #     for l in self.patrols:
+        #         if l.getStatus() == 1:
+        #             l.resetBelief()
+        #             # if has never found footprint before, activate POMDP
+        #             if not l.getPOMDPStatus() and l.getObservationHistory():
+        #                 cur_fp = [(m, l.getObservationAt(self.curT, m)) for m in self.patrols if
+        #                           l.getObservationAt(self.curT, m) is not None]
+        #                 for fp in cur_fp:
+        #                     mm = fp[0]
+        #                     fpp = fp[1]
+        #                     d_b = self.findSegmentsInCoverage(mm.getCurLoc().getRow(), mm.getCurLoc().getCol(),
+        #                                                       fpp[2])
+        #                     for dd_b in d_b:
+        #                         l.addToBelief(dd_b["obj"])
+        #                 # call POMDP plan for action in the next time stage
+        #                 if l.getBelief():
+        #                     l.setPOMDPStatus(True)
+        #                     self.POMDPPlanning(l)
+        #                 elif l.getReplanStage() == self.curT:
+        #                     self.heuristicPath(l, self.curT)
+        #             # else if POMDP is active
+        #             elif l.getPOMDPStatus():
+        #                 cur_fp = [(m, l.getObservationAt(self.curT, m)) for m in self.patrols if
+        #                           l.getObservationAt(self.curT, m) is not None]
+        #                 cur_none_fp = [(m, l.getObservationAt(self.curT, m)) for m in self.patrols if
+        #                                l.getObservationAt(self.curT, m) is None]
+        #                 for fp in cur_fp:
+        #                     mm = fp[0]
+        #                     fpp = fp[1]
+        #                     d_b = self.findSegmentsInCoverage(mm.getCurLoc().getRow(), mm.getCurLoc().getCol(),
+        #                                                       fpp[2])
+        #                     for dd_b in d_b:
+        #                         l.addToBelief(dd_b["obj"])
+        #                 for n_fp in cur_none_fp:
+        #                     mm = n_fp[0]
+        #                     l_history = l.getObservationHistory()
+        #                     past_fp_stages = [k[0] for k in l_history.keys() if
+        #                                       (l_history[k] is not None) and k[1] == mm]
+        #                     if past_fp_stages:
+        #                         last_fp_stage = max(past_fp_stages)
+        #                         nfp_interval = self.curT - last_fp_stage
+        #                         if nfp_interval < self.allowed_no_fp_stages:
+        #                             fpp = l.getObservationAt(last_fp_stage, mm)
+        #                             d_b = self.findSegmentsInCoverage(fpp[0], fpp[1], fpp[2] + nfp_interval)
+        #                             for dd_b in d_b:
+        #                                 l.addToBelief(dd_b["obj"])
+        #
+        #                 if l.getBelief():
+        #                     l.setPOMDPStatus(True)
+        #                     self.POMDPPlanning(l)
+        #                 else:
+        #                     l.setPOMDPStatus(False)
+        #                     self.heuristicPath(l, self.curT)
 
-            # utilize observed footprints
-            for l in self.patrols:
-                if l.getStatus() == 1:
-                    l.resetBelief()
-                    # if has never found footprint before, activate POMDP
-                    if not l.getPOMDPStatus() and l.getObservationHistory():
-                        cur_fp = [(m, l.getObservationAt(self.curT, m)) for m in self.patrols if
-                                  l.getObservationAt(self.curT, m) is not None]
-                        for fp in cur_fp:
-                            mm = fp[0]
-                            fpp = fp[1]
-                            d_b = self.findSegmentsInCoverage(mm.getCurLoc().getRow(), mm.getCurLoc().getCol(),
-                                                              fpp[2])
-                            for dd_b in d_b:
-                                l.addToBelief(dd_b["obj"])
-                        # call POMDP plan for action in the next time stage
-                        if l.getBelief():
-                            l.setPOMDPStatus(True)
-                            self.POMDPPlanning(l)
-                        elif l.getReplanStage() == self.curT:
-                            self.heuristicPath(l, self.curT)
-                    # else if POMDP is active
-                    elif l.getPOMDPStatus():
-                        cur_fp = [(m, l.getObservationAt(self.curT, m)) for m in self.patrols if
-                                  l.getObservationAt(self.curT, m) is not None]
-                        cur_none_fp = [(m, l.getObservationAt(self.curT, m)) for m in self.patrols if
-                                       l.getObservationAt(self.curT, m) is None]
-                        for fp in cur_fp:
-                            mm = fp[0]
-                            fpp = fp[1]
-                            d_b = self.findSegmentsInCoverage(mm.getCurLoc().getRow(), mm.getCurLoc().getCol(),
-                                                              fpp[2])
-                            for dd_b in d_b:
-                                l.addToBelief(dd_b["obj"])
-                        for n_fp in cur_none_fp:
-                            mm = n_fp[0]
-                            l_history = l.getObservationHistory()
-                            past_fp_stages = [k[0] for k in l_history.keys() if
-                                              (l_history[k] is not None) and k[1] == mm]
-                            if past_fp_stages:
-                                last_fp_stage = max(past_fp_stages)
-                                nfp_interval = self.curT - last_fp_stage
-                                if nfp_interval < self.allowed_no_fp_stages:
-                                    fpp = l.getObservationAt(last_fp_stage, mm)
-                                    d_b = self.findSegmentsInCoverage(fpp[0], fpp[1], fpp[2] + nfp_interval)
-                                    for dd_b in d_b:
-                                        l.addToBelief(dd_b["obj"])
-
-                        if l.getBelief():
-                            l.setPOMDPStatus(True)
-                            self.POMDPPlanning(l)
-                        else:
-                            l.setPOMDPStatus(False)
-                            self.heuristicPath(l, self.curT)
-
-        else:
+        # else:
             # with parallel_backend('threading', n_jobs=self.num_patrol):
             #     Parallel()(delayed(self.rePlanningProcess)(i) for i in self.patrols)
-            for i in self.patrols:
-                self.rePlanningProcess(i)
+        for i in self.patrols:
+            self.rePlanningProcess(i)
 
         # if self.trespasser_found and (self.patrol_move_model == 3 or self.patrol_move_model == 4):
         #     # update patrol path
